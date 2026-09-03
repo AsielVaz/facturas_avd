@@ -1,0 +1,16 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" >
+<svg xmlns="http://www.w3.org/2000/svg">
+<defs>
+    <font id="remixicon" horiz-adv-x="1200">
+    <font-face font-family="remixicon"
+      units-per-em="1200" ascent="1020"
+      descent="180" />
+    <missing-glyph horiz-adv-x="0" /><glyph glyph-name="arrow-down-s-line"
+            unicode="&#xEA4E;"
+            horiz-adv-x="1250" d="M624.99775 366.9695L872.48775 614.4555L943.19775 543.745L624.99775 225.5445L306.80225 543.745L377.51275 614.4555L624.99775 366.9695z" /><glyph glyph-name="arrow-up-s-line"
+            unicode="&#xEA78;"
+            horiz-adv-x="1250" d="M624.99775 473.035L377.51275 225.545L306.80225 296.255L624.99775 614.4549999999999L943.19775 296.255L872.48775 225.545L624.99775 473.035z" /><glyph glyph-name="arrow-left-s-line"
+            unicode="&#xEA64;"
+            horiz-adv-x="1250" d="M571.9649999999999 419.9980000000001L819.4549999999999 172.5130000000002L748.7450000000001 101.803L430.545 419.9980000000001L748.7450000000001 738.197L819.4549999999999 667.4865000000001L571.9649999999999 419.9980000000001z" /><glyph glyph-name="arrow-right-s-line"
+            unicode="&#xEA6E;"
+            horiz-adv-x="1250" d="M678.0345 419.9980000000001L430.5455000000001 667.4865000000001L501.2565 738.197L819.4545 419.9980000000001L501.2565 101.803L430.5455000000001 172.5130000000002L678.0345 419.9980000000001z" /></font></defs></svg>
