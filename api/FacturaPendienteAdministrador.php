@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/FacturacionAdministrador.php';
+require_once __DIR__ . '/CfdiXmlGenerador.php';
 
 final class FacturaPendienteValidacionException extends RuntimeException
 {
@@ -17,11 +18,13 @@ final class FacturaPendienteAdministrador
 {
     private readonly int $empresa;
     private readonly FacturacionAdministrador $facturacion;
+    private readonly CfdiXmlGenerador $xmlGenerador;
 
     public function __construct(private readonly PDO $conexion, ?int $empresa = null)
     {
         $this->empresa = max(1, $empresa ?? SesionEmpresa::empresaActual());
         $this->facturacion = new FacturacionAdministrador($conexion, $this->empresa);
+        $this->xmlGenerador = new CfdiXmlGenerador(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma');
     }
 
     /** @return array<string, mixed> */
@@ -32,6 +35,8 @@ final class FacturaPendienteAdministrador
                 f.id, f.fecha, f.nombre AS cliente_original, f.id_clave_corta,
                 f.metodo_pago, f.moneda, f.forma_pago, f.uso_cfdi,
                 f.status_pago, f.status, f.status_error, f.folio, f.serie,
+                COALESCE(f.retencion_isr_tasa, 0) AS retencion_isr_tasa,
+                COALESCE(f.retencion_iva_tasa, 0) AS retencion_iva_tasa,
                 f.total_sin_iva, f.total_iva, f.total_factura, f.xml_subtotal, f.xml_total,
                 cc.id_cliente AS cliente_perfil,
                 UPPER(TRIM(COALESCE(uso.cod_sat, ''))) AS uso_clave
@@ -61,12 +66,15 @@ final class FacturaPendienteAdministrador
                 TRIM(COALESCE(c.clave_sat, '')) AS clave_sat,
                 TRIM(COALESCE(c.clave_producto, '')) AS clave_producto,
                 UPPER(TRIM(COALESCE(c.clave_unidad_medida, ''))) AS clave_unidad_medida,
+                TRIM(COALESCE(um.nombre_unidad_medida, '')) AS unidad_medida,
                 COALESCE(c.precio_min, 0) AS precio_min, COALESCE(c.precio_max, 0) AS precio_max,
                 c.unidades_max, COALESCE(c.objeto_impuesto, 0) AS objeto_impuesto_local,
                 COALESCE(c.impuesto, df.iva, 0) AS tasa_catalogo, c.aplica_iva,
                 CAST(COALESCE(c.razon, '0') AS UNSIGNED) AS concepto_empresa
              FROM detalle_factura df
              LEFT JOIN conceptos c ON c.id = df.id_producto
+             LEFT JOIN catalogo_unidad_medida um
+               ON UPPER(TRIM(um.clave_unidad_medida)) = UPPER(TRIM(c.clave_unidad_medida))
              WHERE df.id_factura = :factura
              ORDER BY df.id"
         );
@@ -102,8 +110,12 @@ final class FacturaPendienteAdministrador
             'moneda_id' => (int) $factura['moneda'],
             'forma_pago_id' => (int) $factura['forma_pago'],
             'uso_cfdi' => (string) $factura['uso_clave'],
+            'retencion_isr_tasa' => (float) $factura['retencion_isr_tasa'],
+            'retencion_iva_tasa' => (float) $factura['retencion_iva_tasa'],
             'exportacion' => '01',
             'folio' => trim((string) $factura['serie']) . '-' . (string) ($factura['folio'] ?: $factura['id']),
+            'serie_cfdi' => trim((string) $factura['serie']),
+            'folio_cfdi' => (int) ($factura['folio'] ?: $factura['id']),
             'status_pago' => (string) $factura['status_pago'],
             'status' => (string) $factura['status'],
             'status_error' => (string) $factura['status_error'],
@@ -122,11 +134,33 @@ final class FacturaPendienteAdministrador
         return $this->validarConPendiente($this->obtener($facturaId), $datos);
     }
 
+    /** @return array{archivo: string, ruta: string, url: string, contenido: string} */
+    public function generarXml(int $facturaId): array
+    {
+        $pendiente = $this->obtener($facturaId);
+        $resultado = $this->validarConPendiente($pendiente, $pendiente);
+        if (!$resultado['valido']) {
+            throw new FacturaPendienteValidacionException($resultado['errores']);
+        }
+        return $this->xmlGenerador->facturar4Plus($facturaId, [
+            'serie' => (string) $pendiente['serie_cfdi'],
+            'folio' => (int) $pendiente['folio_cfdi'],
+            'comprobante' => $resultado['comprobante'],
+            'emisor' => $resultado['emisor'],
+            'receptor' => $resultado['receptor'],
+            'partidas' => $resultado['partidas'],
+        ]);
+    }
+
     /** @param array<string, mixed> $datos
      *  @return array{resultado: array<string, mixed>, factura: array<string, mixed>}
      */
     public function guardar(int $facturaId, array $datos): array
     {
+        $rutaXml = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma'
+            . DIRECTORY_SEPARATOR . 'XML-factura-' . $facturaId . '.xml';
+        $xmlAnterior = is_file($rutaXml) ? file_get_contents($rutaXml) : null;
+        $xmlActualizado = false;
         $this->conexion->beginTransaction();
         try {
             $bloqueo = $this->conexion->prepare(
@@ -176,6 +210,8 @@ final class FacturaPendienteAdministrador
                     tipo_comprobante = 'I',
                     uso_cfdi = :uso_cfdi,
                     id_clave_corta = :perfil,
+                    retencion_isr_tasa = :retencion_isr_tasa,
+                    retencion_iva_tasa = :retencion_iva_tasa,
                     xml_subtotal = :xml_subtotal,
                     xml_total = :xml_total,
                     status = 'Pendiente',
@@ -195,6 +231,8 @@ final class FacturaPendienteAdministrador
             $actualizar->bindValue(':total_iva', (float) $resultado['comprobante']['total']);
             $actualizar->bindValue(':uso_cfdi', $usoId, PDO::PARAM_INT);
             $actualizar->bindValue(':perfil', (string) ((int) $datos['perfil_id']), PDO::PARAM_STR);
+            $actualizar->bindValue(':retencion_isr_tasa', (float) $resultado['comprobante']['retencion_isr_tasa']);
+            $actualizar->bindValue(':retencion_iva_tasa', (float) $resultado['comprobante']['retencion_iva_tasa']);
             $actualizar->bindValue(':xml_subtotal', (float) $resultado['comprobante']['subtotal']);
             $actualizar->bindValue(':xml_total', (float) $resultado['comprobante']['total']);
             $actualizar->bindValue(':factura', $facturaId, PDO::PARAM_INT);
@@ -262,12 +300,28 @@ final class FacturaPendienteAdministrador
                 $eliminar->execute();
             }
 
+            $this->xmlGenerador->facturar4Plus($facturaId, [
+                'serie' => (string) $pendiente['serie_cfdi'],
+                'folio' => (int) $pendiente['folio_cfdi'],
+                'comprobante' => $resultado['comprobante'],
+                'emisor' => $resultado['emisor'],
+                'receptor' => $resultado['receptor'],
+                'partidas' => $resultado['partidas'],
+            ]);
+            $xmlActualizado = true;
             $resultado['persistido'] = true;
             $this->conexion->commit();
             return ['resultado' => $resultado, 'factura' => $this->obtener($facturaId)];
         } catch (Throwable $error) {
             if ($this->conexion->inTransaction()) {
                 $this->conexion->rollBack();
+            }
+            if ($xmlActualizado) {
+                if (is_string($xmlAnterior)) {
+                    file_put_contents($rutaXml, $xmlAnterior, LOCK_EX);
+                } else {
+                    $this->xmlGenerador->eliminar($facturaId);
+                }
             }
             throw $error;
         }
@@ -318,6 +372,7 @@ final class FacturaPendienteAdministrador
             'clave_sat' => (string) $fila['clave_sat'],
             'clave_producto' => (string) $fila['clave_producto'],
             'clave_unidad_medida' => (string) $fila['clave_unidad_medida'],
+            'unidad_medida' => (string) $fila['unidad_medida'],
             'precio_min' => (float) $fila['precio_min'],
             'precio_max' => (float) $fila['precio_max'],
             // Una pendiente histórica puede haber sido creada antes de los límites actuales.

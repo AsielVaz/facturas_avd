@@ -13,15 +13,21 @@ final class Conexion
         }
 
         $configuracion = self::leerEnv(dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env');
+        
+        // Incluimos BD_PORT en la validación (con fallback opcional a 3306 si no existe)
         foreach (['BD_HOST', 'BD_NAME', 'BD_USR_NAME', 'BD_USR_PASSWD'] as $clave) {
             if (!array_key_exists($clave, $configuracion)) {
                 throw new RuntimeException("Falta la variable {$clave} en el archivo .env");
             }
         }
 
+        $puerto = $configuracion['BD_PORT'] ?? '3306';
+
+        // Agregamos port=%s al DSN
         $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=utf8mb4',
+            'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
             $configuracion['BD_HOST'],
+            $puerto,
             $configuracion['BD_NAME']
         );
 

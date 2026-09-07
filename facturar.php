@@ -129,6 +129,8 @@ require 'templates/page-start.php';
                             <div class="col-md-6"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-7"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-5"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
+                            <div class="col-md-6"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para los ejemplos del cliente: 10%.</small></div>
+                            <div class="col-md-6"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Usa 10.6667% solamente cuando corresponda.</small></div>
                         </div>
                     </div>
                 </div>
@@ -155,6 +157,8 @@ require 'templates/page-start.php';
                         <div class="d-flex justify-content-between mb-2"><span class="text-muted">Subtotal</span><strong id="summarySubtotal" class="invoice-money">$0.00</strong></div>
                         <div class="d-flex justify-content-between mb-2"><span class="text-muted">Descuento</span><strong id="summaryDiscount" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="d-flex justify-content-between mb-3"><span class="text-muted">IVA trasladado</span><strong id="summaryTax" class="invoice-money">$0.00</strong></div>
+                        <div class="d-flex justify-content-between mb-2"><span class="text-muted">ISR retenido</span><strong id="summaryWithholdingIsr" class="invoice-money text-danger">-$0.00</strong></div>
+                        <div class="d-flex justify-content-between mb-3"><span class="text-muted">IVA retenido</span><strong id="summaryWithholdingVat" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="border-top pt-3 d-flex justify-content-between align-items-center"><span class="fw-semibold">Total</span><span id="summaryTotal" class="fs-3 fw-bold text-primary invoice-money">$0.00</span></div>
                         <div class="alert alert-warning fs-13 mt-3 mb-3"><i data-lucide="database" class="fs-16 me-1"></i><?= $modoEdicion ? 'Guardar actualizará únicamente esta factura pendiente.' : 'La validación no guardará la factura.' ?></div>
                         <button id="validateButton" type="submit" class="btn btn-primary w-100" <?= empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
@@ -168,7 +172,7 @@ require 'templates/page-start.php';
         <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
             <div class="modal-header"><div><h5 class="modal-title">Vista previa CFDI 4.0</h5><p class="text-muted mb-0 fs-13"><?= $modoEdicion ? 'Cambios guardados en la factura pendiente; aún no tiene validez fiscal.' : 'Documento no persistido y sin validez fiscal.' ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body" id="previewContent"></div>
-            <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
+            <div class="modal-footer"><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>">Guardar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
         </div></div>
     </div>
 <?php endif; ?>
@@ -193,15 +197,19 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const paymentMethodSelect = document.getElementById('paymentMethodSelect');
     const paymentFormSelect = document.getElementById('paymentFormSelect');
     const useSelect = document.getElementById('cfdiUseSelect');
+    const withholdingIsrInput = document.getElementById('withholdingIsrInput');
+    const withholdingVatInput = document.getElementById('withholdingVatInput');
     const itemsBody = document.getElementById('invoiceItems');
     const emptyItems = document.getElementById('emptyItems');
     const messages = document.getElementById('invoiceMessages');
     const validateButton = document.getElementById('validateButton');
+    const saveInvoiceButton = document.getElementById('saveInvoiceButton');
     const previewContent = document.getElementById('previewContent');
     const concepts = new Map(config.conceptos.map(item => [String(item.id), item]));
     const editing = config.edicion;
     let profiles = new Map();
     let rowSequence = 0;
+    let validatedPayload = null;
 
     function money(value) {
         const currency = selectedCode(currencySelect) || 'MXN';
@@ -339,13 +347,20 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     }
 
     function calculate() {
-        let subtotal = 0, discount = 0, tax = 0, total = 0;
+        let subtotal = 0, discount = 0, tax = 0, withholdingIsr = 0, withholdingVat = 0, total = 0;
+        const withholdingIsrRate = Number(withholdingIsrInput.value) || 0;
+        const withholdingVatRate = Number(withholdingVatInput.value) || 0;
         [...itemsBody.rows].forEach(row => {
             const values = rowValues(row);
+            const taxableBase = values.concept?.objeto_impuesto === '02' ? Math.max(0, values.subtotal - values.discount) : 0;
+            const rowWithholdingIsr = taxableBase * withholdingIsrRate / 100;
+            const rowWithholdingVat = taxableBase * withholdingVatRate / 100;
             subtotal += values.subtotal;
             discount += values.discount;
             tax += values.tax;
-            total += values.total;
+            withholdingIsr += rowWithholdingIsr;
+            withholdingVat += rowWithholdingVat;
+            total += values.total - rowWithholdingIsr - rowWithholdingVat;
             row.querySelector('.item-subtotal').textContent = money(values.subtotal);
             row.querySelector('.item-tax').textContent = money(values.tax);
             row.querySelector('.item-total').textContent = money(values.total);
@@ -353,6 +368,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         document.getElementById('summarySubtotal').textContent = money(subtotal);
         document.getElementById('summaryDiscount').textContent = '-' + money(discount);
         document.getElementById('summaryTax').textContent = money(tax);
+        document.getElementById('summaryWithholdingIsr').textContent = '-' + money(withholdingIsr);
+        document.getElementById('summaryWithholdingVat').textContent = '-' + money(withholdingVat);
         document.getElementById('summaryTotal').textContent = money(total);
     }
 
@@ -389,6 +406,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             forma_pago_id: Number(paymentFormSelect.value),
             uso_cfdi: useSelect.value,
             exportacion: document.getElementById('exportSelect').value,
+            retencion_isr_tasa: Number(withholdingIsrInput.value) || 0,
+            retencion_iva_tasa: Number(withholdingVatInput.value) || 0,
             partidas: [...itemsBody.rows].map(row => ({
                 detalle_id: Number(row.dataset.detailId || 0),
                 concepto_id: Number(row.querySelector('.item-concept').value),
@@ -412,7 +431,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             '<div class="row g-3 mb-4"><div class="col-md-6"><div class="border rounded-3 p-3 h-100"><small class="text-uppercase text-muted">Emisor</small><h6 class="mt-2">' + escapeHtml(result.emisor.nombre) + '</h6><div class="font-monospace">' + escapeHtml(result.emisor.rfc) + '</div><div>Régimen ' + escapeHtml(result.emisor.regimen_fiscal) + '</div></div></div>' +
             '<div class="col-md-6"><div class="border rounded-3 p-3 h-100"><small class="text-uppercase text-muted">Receptor</small><h6 class="mt-2">' + escapeHtml(receiver.nombre || 'Sin receptor válido') + '</h6><div class="font-monospace">' + escapeHtml(receiver.rfc || '—') + '</div><div>Régimen ' + escapeHtml(receiver.regimen_fiscal || '—') + ' · CP ' + escapeHtml(receiver.domicilio_fiscal || '—') + '</div></div></div></div>' +
             '<div class="table-responsive"><table class="table"><thead><tr><th>#</th><th>Concepto</th><th>Unidad</th><th class="text-end">Cantidad</th><th class="text-end">Precio</th><th class="text-end">IVA</th><th class="text-end">Total</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-            '<div class="row justify-content-end"><div class="col-md-5"><div class="border rounded-3 p-3"><div class="d-flex justify-content-between"><span>Subtotal</span><strong>' + money(result.comprobante.subtotal) + '</strong></div><div class="d-flex justify-content-between"><span>Descuento</span><strong>-' + money(result.comprobante.descuento) + '</strong></div><div class="d-flex justify-content-between"><span>IVA</span><strong>' + money(result.comprobante.iva) + '</strong></div><hr><div class="d-flex justify-content-between fs-5"><span>Total ' + escapeHtml(result.comprobante.moneda) + '</span><strong>' + money(result.comprobante.total) + '</strong></div></div></div></div>';
+            '<div class="row justify-content-end"><div class="col-md-5"><div class="border rounded-3 p-3"><div class="d-flex justify-content-between"><span>Subtotal</span><strong>' + money(result.comprobante.subtotal) + '</strong></div><div class="d-flex justify-content-between"><span>Descuento</span><strong>-' + money(result.comprobante.descuento) + '</strong></div><div class="d-flex justify-content-between"><span>IVA trasladado</span><strong>' + money(result.comprobante.iva) + '</strong></div><div class="d-flex justify-content-between"><span>ISR retenido</span><strong>-' + money(result.comprobante.retencion_isr) + '</strong></div><div class="d-flex justify-content-between"><span>IVA retenido</span><strong>-' + money(result.comprobante.retencion_iva) + '</strong></div><hr><div class="d-flex justify-content-between fs-5"><span>Total ' + escapeHtml(result.comprobante.moneda) + '</span><strong>' + money(result.comprobante.total) + '</strong></div></div></div></div>';
+        if (saveInvoiceButton && !editing) saveInvoiceButton.disabled = !result.valido;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('previewModal')).show();
     }
 
@@ -438,6 +458,44 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         if (event.target.classList.contains('item-concept')) conceptChanged(row); else calculate();
     });
     itemsBody.addEventListener('input', calculate);
+    withholdingIsrInput.addEventListener('input', calculate);
+    withholdingVatInput.addEventListener('input', calculate);
+    saveInvoiceButton?.addEventListener('click', async () => {
+        if (!validatedPayload || saveInvoiceButton.disabled) return;
+        previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
+        saveInvoiceButton.disabled = true;
+        saveInvoiceButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+        try {
+            const response = await fetch('api/facturas.php?accion=guardar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify(validatedPayload),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                const error = new Error(data.error || 'No fue posible guardar la factura.');
+                error.details = data.errores || [];
+                error.saved = data.guardada === true;
+                error.invoice = data.factura || null;
+                throw error;
+            }
+            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert alert-success save-invoice-feedback"><strong>' + escapeHtml(data.mensaje) + '</strong><div class="mt-1">Folio ' + escapeHtml(data.factura.serie + '-' + data.factura.folio) + ' · <a href="' + escapeHtml(data.factura.xml.url) + '" download>Descargar XML sin firma</a> · <a href="api/factura-pdf.php?id=' + encodeURIComponent(data.factura.id) + '" download>Descargar PDF de prueba</a></div></div>');
+            saveInvoiceButton.innerHTML = '<i data-lucide="circle-check" class="fs-17 me-1"></i>Factura guardada';
+            validatedPayload = null;
+            if (window.lucide) window.lucide.createIcons();
+        } catch (error) {
+            const details = error.details?.length ? error.details : [error.message];
+            const title = error.saved ? 'La factura quedó guardada.' : 'No se pudo guardar la factura.';
+            const savedInfo = error.saved && error.invoice ? '<div class="mt-2">Folio ' + escapeHtml(error.invoice.serie + '-' + error.invoice.folio) + ' · <a href="' + escapeHtml(error.invoice.xml.url) + '" download>Descargar XML sin firma</a></div>' : '';
+            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert ' + (error.saved ? 'alert-warning' : 'alert-danger') + ' save-invoice-feedback"><strong>' + title + '</strong><ul class="mb-0 mt-2">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>' + savedInfo + '</div>');
+            saveInvoiceButton.disabled = error.saved;
+            saveInvoiceButton.innerHTML = error.saved
+                ? '<i data-lucide="alert-triangle" class="fs-17 me-1"></i>Guardada sin timbrar'
+                : '<i data-lucide="save" class="fs-17 me-1"></i>Guardar factura';
+            if (error.saved) validatedPayload = null;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
     itemsBody.addEventListener('click', event => {
         const button = event.target.closest('.item-remove');
         if (!button) return;
@@ -451,10 +509,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         validateButton.disabled = true;
         validateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (editing ? 'Guardando...' : 'Validando...');
         try {
+            const invoicePayload = payload();
             const response = await fetch('api/facturacion.php?accion=' + (editing ? 'guardar' : 'validar'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-                body: JSON.stringify(payload()),
+                body: JSON.stringify(invoicePayload),
             });
             const data = await response.json();
             if (!response.ok || !data.ok) {
@@ -463,6 +522,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 throw error;
             }
             if (editing && data.factura?.huella) editing.huella = data.factura.huella;
+            validatedPayload = !editing && data.resultado.valido ? invoicePayload : null;
             showMessages(data.resultado.errores, []);
             renderPreview(data.resultado);
         } catch (error) {

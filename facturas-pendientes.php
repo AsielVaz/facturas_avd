@@ -32,4 +32,40 @@ foreach ($cards as $c) { [$kpiLabel,$kpiValue,$kpiTrend,$kpiIcon,$kpiColor,$extr
 ?>
 </div>
 <?php $invoiceType='pending'; require 'templates/invoice-table.php'; ?>
+<?php
+$csrfTimbrado = (string) ($_SESSION['facturacion_csrf'] ??= bin2hex(random_bytes(32)));
+$pageScripts = '<script>window.facturasPendientesConfig=' . json_encode(
+    ['csrf' => $csrfTimbrado],
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+) . ';</script>' . <<<'HTML'
+<script>
+document.querySelectorAll('.js-stamp-invoice').forEach(button => {
+    button.addEventListener('click', async () => {
+        if (button.disabled || !window.confirm('¿Deseas timbrar fiscalmente esta factura?')) return;
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const response = await fetch('api/facturas.php?accion=timbrar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({
+                    csrf: window.facturasPendientesConfig.csrf,
+                    factura_id: Number(button.dataset.invoiceId),
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'No fue posible timbrar la factura.');
+            window.location.href = 'facturas-timbradas.php';
+        } catch (error) {
+            window.alert(error.message || 'No fue posible timbrar la factura.');
+            button.disabled = false;
+            button.innerHTML = original;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+});
+</script>
+HTML;
+?>
 <?php require 'templates/scripts.php'; ?>

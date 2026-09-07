@@ -1,0 +1,10 @@
+{
+    "require": {
+        "php": ">=8.3",
+        "setasign/fpdf": "^1.8",
+        "chillerlan/php-qrcode": "^6.0"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

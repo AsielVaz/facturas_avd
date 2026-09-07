@@ -146,16 +146,19 @@ final class FacturacionAdministrador
     {
         $buscar = trim($buscar);
         $consulta = $this->conexion->prepare(
-            "SELECT id, TRIM(COALESCE(concepto, '')) AS concepto, TRIM(clave_sat) AS clave_sat,
-                    TRIM(COALESCE(clave_producto, '')) AS clave_producto,
-                    UPPER(TRIM(clave_unidad_medida)) AS clave_unidad_medida,
-                    precio_min, precio_max, unidades_max, aplica_iva,
-                    COALESCE(objeto_impuesto, 0) AS objeto_impuesto_local,
-                    COALESCE(impuesto, 0) AS tasa_iva
-             FROM conceptos
-             WHERE CAST(razon AS UNSIGNED) = :empresa
-               AND (:buscar_vacio = '' OR concepto LIKE :buscar_concepto OR clave_sat LIKE :buscar_clave)
-             ORDER BY concepto, id"
+            "SELECT c.id, TRIM(COALESCE(c.concepto, '')) AS concepto, TRIM(c.clave_sat) AS clave_sat,
+                    TRIM(COALESCE(c.clave_producto, '')) AS clave_producto,
+                    UPPER(TRIM(c.clave_unidad_medida)) AS clave_unidad_medida,
+                    TRIM(COALESCE(um.nombre_unidad_medida, '')) AS unidad_medida,
+                    c.precio_min, c.precio_max, c.unidades_max, c.aplica_iva,
+                    COALESCE(c.objeto_impuesto, 0) AS objeto_impuesto_local,
+                    COALESCE(c.impuesto, 0) AS tasa_iva
+             FROM conceptos c
+             LEFT JOIN catalogo_unidad_medida um
+               ON UPPER(TRIM(um.clave_unidad_medida)) = UPPER(TRIM(c.clave_unidad_medida))
+             WHERE CAST(c.razon AS UNSIGNED) = :empresa
+               AND (:buscar_vacio = '' OR c.concepto LIKE :buscar_concepto OR c.clave_sat LIKE :buscar_clave)
+             ORDER BY c.concepto, c.id"
         );
         $consulta->bindValue(':empresa', $this->empresa, PDO::PARAM_INT);
         $consulta->bindValue(':buscar_vacio', $buscar, PDO::PARAM_STR);
@@ -365,6 +368,21 @@ final class FacturacionAdministrador
         $subtotal = 0.0;
         $descuentoTotal = 0.0;
         $ivaTotal = 0.0;
+        $retencionIsrTotal = 0.0;
+        $retencionIvaTotal = 0.0;
+        $retencionIsrTasa = round((float) ($datos['retencion_isr_tasa'] ?? 0), 6);
+        $retencionIvaTasa = round((float) ($datos['retencion_iva_tasa'] ?? 0), 6);
+        if (!is_finite($retencionIsrTasa) || $retencionIsrTasa < 0 || $retencionIsrTasa > 100) {
+            $errores[] = 'La tasa de retención de ISR debe estar entre 0 y 100.';
+            $retencionIsrTasa = 0.0;
+        }
+        if (!is_finite($retencionIvaTasa) || $retencionIvaTasa < 0 || $retencionIvaTasa > 100) {
+            $errores[] = 'La tasa de retención de IVA debe estar entre 0 y 100.';
+            $retencionIvaTasa = 0.0;
+        }
+        if ($retencionIsrTasa > 0 || $retencionIvaTasa > 0) {
+            $advertencias[] = 'Confirma con el receptor las tasas de retención antes de enviar el comprobante al PAC.';
+        }
         foreach ($partidasEntrada as $indice => $partidaEntrada) {
             if (!is_array($partidaEntrada)) {
                 $errores[] = 'Una de las partidas tiene un formato inválido.';
@@ -407,13 +425,25 @@ final class FacturacionAdministrador
                 $descuento = max(0, min($importe, $descuento));
             }
             $base = round($importe - $descuento, 6);
+            if ($concepto['objeto_impuesto'] === '02' && $base <= 0) {
+                $errores[] = "Partida {$numero}: la base de un concepto sujeto a impuesto debe ser mayor que cero.";
+            }
             $iva = $concepto['objeto_impuesto'] === '02'
-                ? round($base * ((float) $concepto['tasa_iva'] / 100), 2)
+                ? round($base * ((float) $concepto['tasa_iva'] / 100), 6)
+                : 0.0;
+            $retencionIsr = $concepto['objeto_impuesto'] === '02'
+                ? round($base * ($retencionIsrTasa / 100), 6)
+                : 0.0;
+            $retencionIva = $concepto['objeto_impuesto'] === '02'
+                ? round($base * ($retencionIvaTasa / 100), 6)
                 : 0.0;
             $totalPartida = round($base + $iva, 2);
+            $totalNetoPartida = round($totalPartida - $retencionIsr - $retencionIva, 2);
             $subtotal += $importe;
             $descuentoTotal += $descuento;
             $ivaTotal += $iva;
+            $retencionIsrTotal += $retencionIsr;
+            $retencionIvaTotal += $retencionIva;
             $partidas[] = [
                 'numero' => $numero,
                 'detalle_id' => max(0, (int) ($partidaEntrada['detalle_id'] ?? 0)),
@@ -421,6 +451,7 @@ final class FacturacionAdministrador
                 'clave_prod_serv' => $concepto['clave_sat'],
                 'no_identificacion' => $concepto['clave_producto'],
                 'clave_unidad' => $concepto['clave_unidad_medida'],
+                'unidad' => $concepto['unidad_medida'],
                 'descripcion' => $descripcion,
                 'cantidad' => $cantidad,
                 'valor_unitario' => round($precio, 6),
@@ -429,14 +460,21 @@ final class FacturacionAdministrador
                 'objeto_impuesto' => $concepto['objeto_impuesto'],
                 'tasa_iva' => (float) $concepto['tasa_iva'],
                 'iva' => $iva,
+                'retencion_isr_tasa' => $retencionIsrTasa,
+                'retencion_isr' => $retencionIsr,
+                'retencion_iva_tasa' => $retencionIvaTasa,
+                'retencion_iva' => $retencionIva,
                 'total' => $totalPartida,
+                'total_neto' => $totalNetoPartida,
             ];
         }
 
         $subtotal = round($subtotal, 2);
         $descuentoTotal = round($descuentoTotal, 2);
         $ivaTotal = round($ivaTotal, 2);
-        $total = round($subtotal - $descuentoTotal + $ivaTotal, 2);
+        $retencionIsrTotal = round($retencionIsrTotal, 2);
+        $retencionIvaTotal = round($retencionIvaTotal, 2);
+        $total = round($subtotal - $descuentoTotal + $ivaTotal - $retencionIsrTotal - $retencionIvaTotal, 2);
         if ($total <= 0 && $partidas !== []) {
             $errores[] = 'El total del comprobante debe ser mayor que cero.';
         }
@@ -459,6 +497,10 @@ final class FacturacionAdministrador
                 'subtotal' => $subtotal,
                 'descuento' => $descuentoTotal,
                 'iva' => $ivaTotal,
+                'retencion_isr_tasa' => $retencionIsrTasa,
+                'retencion_isr' => $retencionIsrTotal,
+                'retencion_iva_tasa' => $retencionIvaTasa,
+                'retencion_iva' => $retencionIvaTotal,
                 'total' => $total,
             ],
             'emisor' => [
