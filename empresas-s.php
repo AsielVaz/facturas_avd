@@ -41,7 +41,7 @@ $pageTitle = 'Seleccionar empresa';
 $pageEyebrow = 'Configuracion / Empresa actual';
 $activeModule = '';
 $activePage = 'empresas';
-$pageAction = '<a href="facturas-timbradas.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Regresar al ERP</a>';
+$pageAction = '<a href="facturas.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Regresar al ERP</a>';
 
 require 'templates/page-start.php';
 ?>

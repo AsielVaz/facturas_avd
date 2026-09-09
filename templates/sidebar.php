@@ -16,11 +16,11 @@ if (!isset($sidebarBanks)) {
 <div class="main-nav">
     <div class="d-flex justify-content-between main-logo-box">
         <div class="logo-box">
-            <a href="facturas-pendientes.php" class="logo-dark">
+            <a href="facturas.php" class="logo-dark">
                 <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-sm erp-company-logo" alt="Logo de la empresa actual">
                 <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-lg erp-company-logo" alt="Logo de la empresa actual">
             </a>
-            <a href="facturas-pendientes.php" class="logo-light">
+            <a href="facturas.php" class="logo-light">
                 <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-sm erp-company-logo" alt="Logo de la empresa actual">
                 <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-lg erp-company-logo" alt="Logo de la empresa actual">
             </a>
@@ -42,7 +42,8 @@ if (!isset($sidebarBanks)) {
                     <ul class="sub-menu-nav">
                         <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturar') ?>" href="facturar.php">Nueva factura</a></li>
                         <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas-pendientes') ?>" href="facturas-pendientes.php">Facturas pendientes</a></li>
-                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas-timbradas') ?>" href="facturas-timbradas.php">Facturas timbradas</a></li>
+                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas') ?>" href="facturas.php">Facturas</a></li>
+                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas-timbradas') ?>" href="facturas-timbradas.php">Facturas detalles</a></li>
                     </ul>
                 </div>
             </li>

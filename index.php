@@ -1,3 +1,3 @@
 <?php
-header('Location: facturas-pendientes.php');
+header('Location: facturas.php');
 exit;

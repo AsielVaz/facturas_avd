@@ -1,8 +1,8 @@
 <?php
-$pageTitle = 'Facturas';
-$pageEyebrow = 'Facturas procesadas';
+$pageTitle = 'Facturas pendientes';
+$pageEyebrow = 'Facturas / Por procesar';
 $activeModule = 'facturas';
-$activePage = 'facturas';
+$activePage = 'facturas-pendientes';
 $pageAction = '<a class="btn btn-primary" href="facturar.php"><i data-lucide="plus" class="fs-18 me-1"></i>Nueva factura</a>';
 require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
 $invoiceError = '';
@@ -21,7 +21,7 @@ require 'templates/page-start.php';
 ?>
 <?php if ($invoiceError !== ''): ?><div class="alert alert-danger"><i data-lucide="database-zap" class="fs-18 me-2"></i><?= htmlspecialchars($invoiceError) ?></div><?php endif; ?>
 <div class="row g-3 mb-4">
-<!-- <?php
+<?php
 $cards = [
  ['Pendientes por timbrar',number_format($invoiceSummary['total']),'$'.number_format($invoiceSummary['importe'], 2),'receipt','primary','Total registrado','primary'],
  ['Del mes mas reciente',number_format($invoiceSummary['este_mes']),'Facturas registradas','calendar-days','info','Actividad mensual','info'],
@@ -29,7 +29,7 @@ $cards = [
  ['Sin incidencias',number_format(max(0, $invoiceSummary['total'] - $invoiceSummary['errores'])),'Listas para procesar','file-check-2','success','Pendientes validas','success'],
 ];
 foreach ($cards as $c) { [$kpiLabel,$kpiValue,$kpiTrend,$kpiIcon,$kpiColor,$extra,$kpiTrendColor]=$c; $kpiTrend="$kpiTrend · $extra"; require 'templates/kpi-card.php'; }
-?> -->
+?>
 </div>
 <?php $invoiceType='pending'; require 'templates/invoice-table.php'; ?>
 <?php
@@ -56,7 +56,7 @@ document.querySelectorAll('.js-stamp-invoice').forEach(button => {
             });
             const data = await response.json();
             if (!response.ok || !data.ok) throw new Error(data.error || 'No fue posible timbrar la factura.');
-            window.location.href = 'facturas-timbradas.php';
+            window.location.href = 'facturas.php';
         } catch (error) {
             window.alert(error.message || 'No fue posible timbrar la factura.');
             button.disabled = false;

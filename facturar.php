@@ -34,11 +34,32 @@ $emisor = $contextoFactura['emisor'];
 $clientes = $contextoFactura['clientes'];
 $conceptos = $contextoFactura['conceptos'];
 $catalogos = $contextoFactura['catalogos'];
+$metodoPagoPueId = 0;
+foreach (($catalogos['metodos_pago'] ?? []) as $metodoPago) {
+    if ((string) ($metodoPago['clave'] ?? '') === 'PUE') {
+        $metodoPagoPueId = (int) ($metodoPago['id'] ?? 0);
+        break;
+    }
+}
+$facturaCompletaInicial = $modoEdicion && (
+    (float) ($facturaPendiente['retencion_isr_tasa'] ?? 0) > 0
+    || (float) ($facturaPendiente['retencion_iva_tasa'] ?? 0) > 0
+    || (string) ($facturaPendiente['exportacion'] ?? '01') !== '01'
+    || ($metodoPagoPueId > 0 && (int) ($facturaPendiente['metodo_pago_id'] ?? 0) !== $metodoPagoPueId)
+    || (string) ($facturaPendiente['uso_cfdi'] ?? 'G03') !== 'G03'
+);
 $pageTitle = $modoEdicion ? 'Editar factura pendiente' : 'Preparar factura CFDI 4.0';
 $pageEyebrow = $modoEdicion ? 'Facturas / Editar pendiente' : 'Facturas / Nueva factura';
 $activeModule = 'facturas';
 $activePage = 'facturar';
-$pageAction = '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a>';
+$pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-end gap-2">'
+    . '<div class="invoice-type-switcher d-flex align-items-center gap-3 border rounded-3 px-3 py-2 bg-body-tertiary">'
+    . '<i data-lucide="sliders-horizontal" class="text-primary flex-shrink-0"></i>'
+    . '<div><small class="d-block text-uppercase text-muted fw-semibold">Tipo de factura</small>'
+    . '<div class="form-check form-switch mb-0"><input id="invoiceTypeSwitch" class="form-check-input" type="checkbox" role="switch" '
+    . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
+    . ($facturaCompletaInicial ? 'Factura completa' : 'Factura sencilla') . '</label></div></div></div>'
+    . '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a></div>';
 require 'templates/page-start.php';
 ?>
 
@@ -50,6 +71,8 @@ require 'templates/page-start.php';
     .invoice-total-panel { position: sticky; top: 88px; }
     .invoice-money { font-variant-numeric: tabular-nums; }
     .invoice-readonly { background: var(--bs-tertiary-bg) !important; }
+    .invoice-type-switcher .form-check-input { width: 2.75rem; height: 1.35rem; margin-top: .1rem; cursor: pointer; }
+    .invoice-type-switcher .form-check-label { cursor: pointer; padding-left: .25rem; }
     @media (max-width: 991.98px) { .invoice-total-panel { position: static; } }
 </style>
 
@@ -125,12 +148,12 @@ require 'templates/page-start.php';
                             <div class="col-md-3"><label for="invoiceDate" class="form-label">Fecha</label><input id="invoiceDate" type="date" class="form-control" required value="<?= htmlspecialchars($modoEdicion ? (string) $facturaPendiente['fecha'] : date('Y-m-d')) ?>"></div>
                             <div class="col-md-3"><label for="currencySelect" class="form-label">Moneda</label><select id="currencySelect" class="form-select" required><?php foreach (($catalogos['monedas'] ?? []) as $moneda): ?><option value="<?= (int) $moneda['id'] ?>" data-clave="<?= htmlspecialchars((string) $moneda['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['moneda_id'] === (int) $moneda['id'] : $moneda['clave'] === 'MXN') ? 'selected' : '' ?>><?= htmlspecialchars($moneda['clave'] . ' · ' . $moneda['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-3" id="exchangeGroup"><label for="exchangeInput" class="form-label">Tipo de cambio</label><input id="exchangeInput" type="number" min="0.000001" step="0.000001" value="1" class="form-control" readonly></div>
-                            <div class="col-md-6"><label for="paymentMethodSelect" class="form-label">Método de pago</label><select id="paymentMethodSelect" class="form-select" required><?php foreach (($catalogos['metodos_pago'] ?? []) as $metodo): ?><option value="<?= (int) $metodo['id'] ?>" data-clave="<?= htmlspecialchars((string) $metodo['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['metodo_pago_id'] === (int) $metodo['id'] : $metodo['clave'] === 'PUE') ? 'selected' : '' ?>><?= htmlspecialchars($metodo['clave'] . ' · ' . $metodo['descripcion']) ?></option><?php endforeach; ?></select></div>
-                            <div class="col-md-6"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
-                            <div class="col-md-7"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
-                            <div class="col-md-5"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
-                            <div class="col-md-6"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para los ejemplos del cliente: 10%.</small></div>
-                            <div class="col-md-6"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Usa 10.6667% solamente cuando corresponda.</small></div>
+                            <div id="paymentMethodGroup" class="col-md-6<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="paymentMethodSelect" class="form-label">Método de pago</label><select id="paymentMethodSelect" class="form-select" required><?php foreach (($catalogos['metodos_pago'] ?? []) as $metodo): ?><option value="<?= (int) $metodo['id'] ?>" data-clave="<?= htmlspecialchars((string) $metodo['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['metodo_pago_id'] === (int) $metodo['id'] : $metodo['clave'] === 'PUE') ? 'selected' : '' ?>><?= htmlspecialchars($metodo['clave'] . ' · ' . $metodo['descripcion']) ?></option><?php endforeach; ?></select></div>
+                            <div id="paymentFormGroup" class="<?= $facturaCompletaInicial ? 'col-md-6' : 'col-12' ?>"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
+                            <div id="cfdiUseGroup" class="col-md-7<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
+                            <div class="col-md-5 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
+                            <div class="col-md-6 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para los ejemplos del cliente: 10%.</small></div>
+                            <div class="col-md-6 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Usa 10.6667% solamente cuando corresponda.</small></div>
                         </div>
                     </div>
                 </div>
@@ -160,7 +183,7 @@ require 'templates/page-start.php';
                         <div class="d-flex justify-content-between mb-2"><span class="text-muted">ISR retenido</span><strong id="summaryWithholdingIsr" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="d-flex justify-content-between mb-3"><span class="text-muted">IVA retenido</span><strong id="summaryWithholdingVat" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="border-top pt-3 d-flex justify-content-between align-items-center"><span class="fw-semibold">Total</span><span id="summaryTotal" class="fs-3 fw-bold text-primary invoice-money">$0.00</span></div>
-                        <div class="alert alert-warning fs-13 mt-3 mb-3"><i data-lucide="database" class="fs-16 me-1"></i><?= $modoEdicion ? 'Guardar actualizará únicamente esta factura pendiente.' : 'La validación no guardará la factura.' ?></div>
+                        <div class="alert alert-warning fs-13 mt-3 mb-3"><?= $modoEdicion ? 'Guardar actualizará únicamente esta factura pendiente.' : 'La validación no guardará la factura.' ?></div>
                         <button id="validateButton" type="submit" class="btn btn-primary w-100" <?= empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
                     </div>
                 </div>
@@ -194,9 +217,16 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const receiverSummary = document.getElementById('receiverSummary');
     const currencySelect = document.getElementById('currencySelect');
     const exchangeInput = document.getElementById('exchangeInput');
+    const paymentMethodGroup = document.getElementById('paymentMethodGroup');
     const paymentMethodSelect = document.getElementById('paymentMethodSelect');
+    const paymentFormGroup = document.getElementById('paymentFormGroup');
     const paymentFormSelect = document.getElementById('paymentFormSelect');
     const useSelect = document.getElementById('cfdiUseSelect');
+    const useGroup = document.getElementById('cfdiUseGroup');
+    const invoiceTypeSwitch = document.getElementById('invoiceTypeSwitch');
+    const invoiceTypeLabel = document.getElementById('invoiceTypeLabel');
+    const advancedFields = [...document.querySelectorAll('.invoice-advanced-field')];
+    const exportSelect = document.getElementById('exportSelect');
     const withholdingIsrInput = document.getElementById('withholdingIsrInput');
     const withholdingVatInput = document.getElementById('withholdingVatInput');
     const itemsBody = document.getElementById('invoiceItems');
@@ -224,6 +254,29 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function selectedCode(select) {
         return select.options[select.selectedIndex]?.dataset.clave || '';
+    }
+
+    function isCompleteInvoice() {
+        return invoiceTypeSwitch.checked;
+    }
+
+    function applyInvoiceType() {
+        const complete = isCompleteInvoice();
+        invoiceTypeLabel.textContent = complete ? 'Factura completa' : 'Factura sencilla';
+        advancedFields.forEach(field => field.classList.toggle('d-none', !complete));
+        paymentMethodGroup.classList.toggle('d-none', !complete);
+        useGroup.classList.toggle('d-none', !complete);
+        paymentFormGroup.classList.toggle('col-md-6', complete);
+        paymentFormGroup.classList.toggle('col-12', !complete);
+        exportSelect.required = complete;
+        paymentMethodSelect.required = complete;
+        useSelect.required = complete;
+        if (!complete) {
+            const pueOption = [...paymentMethodSelect.options].find(option => option.dataset.clave === 'PUE');
+            if (pueOption) paymentMethodSelect.value = pueOption.value;
+            useSelect.value = 'G03';
+        }
+        calculate();
     }
 
     function showMessages(errors, warnings) {
@@ -348,8 +401,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function calculate() {
         let subtotal = 0, discount = 0, tax = 0, withholdingIsr = 0, withholdingVat = 0, total = 0;
-        const withholdingIsrRate = Number(withholdingIsrInput.value) || 0;
-        const withholdingVatRate = Number(withholdingVatInput.value) || 0;
+        const withholdingIsrRate = isCompleteInvoice() ? Number(withholdingIsrInput.value) || 0 : 0;
+        const withholdingVatRate = isCompleteInvoice() ? Number(withholdingVatInput.value) || 0 : 0;
         [...itemsBody.rows].forEach(row => {
             const values = rowValues(row);
             const taxableBase = values.concept?.objeto_impuesto === '02' ? Math.max(0, values.subtotal - values.discount) : 0;
@@ -405,9 +458,9 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             metodo_pago_id: Number(paymentMethodSelect.value),
             forma_pago_id: Number(paymentFormSelect.value),
             uso_cfdi: useSelect.value,
-            exportacion: document.getElementById('exportSelect').value,
-            retencion_isr_tasa: Number(withholdingIsrInput.value) || 0,
-            retencion_iva_tasa: Number(withholdingVatInput.value) || 0,
+            exportacion: isCompleteInvoice() ? exportSelect.value : '01',
+            retencion_isr_tasa: isCompleteInvoice() ? Number(withholdingIsrInput.value) || 0 : 0,
+            retencion_iva_tasa: isCompleteInvoice() ? Number(withholdingVatInput.value) || 0 : 0,
             partidas: [...itemsBody.rows].map(row => ({
                 detalle_id: Number(row.dataset.detailId || 0),
                 concepto_id: Number(row.querySelector('.item-concept').value),
@@ -460,6 +513,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     itemsBody.addEventListener('input', calculate);
     withholdingIsrInput.addEventListener('input', calculate);
     withholdingVatInput.addEventListener('input', calculate);
+    invoiceTypeSwitch.addEventListener('change', applyInvoiceType);
     saveInvoiceButton?.addEventListener('click', async () => {
         if (!validatedPayload || saveInvoiceButton.disabled) return;
         previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
@@ -536,6 +590,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         }
     });
 
+    applyInvoiceType();
     if (editing) {
         await loadProfiles();
         profileSelect.value = String(editing.perfil_id || '');
