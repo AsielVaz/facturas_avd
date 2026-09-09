@@ -86,13 +86,20 @@ final class CfdiTimbradoServicio
                 ]);
                 $token = trim((string) ($autenticacion['Mensaje'] ?? ''));
                 if ($token === '') {
-                    throw new CfdiTimbradoException($this->mensajePac($autenticacion, 'IOFacturo no devolvió un token de autenticación.'));
+                    throw new CfdiTimbradoException('IOFacturo no devolvió un token de autenticación.');
                 }
 
                 $respuesta = $this->enviarJson($baseUrl . '/TimbrarDocumento', [
                     'Comprobante' => $xmlSinFirma,
                     'Token' => $token,
                 ]);
+                if (!array_key_exists('DatoAdicional', $respuesta)
+                    || !$this->respuestaPacExitosa($respuesta['DatoAdicional'])) {
+                    throw new CfdiTimbradoException($this->mensajePac(
+                        $respuesta,
+                        'IOFacturo rechazó el CFDI sin proporcionar el motivo.'
+                    ));
+                }
                 $xmlTimbrado = trim((string) ($respuesta['Mensaje'] ?? ''));
                 if ($xmlTimbrado === '') {
                     throw new CfdiTimbradoException($this->mensajePac($respuesta, 'IOFacturo no devolvió el XML timbrado.'));
@@ -263,6 +270,21 @@ final class CfdiTimbradoServicio
         }
         $partes = array_values(array_filter(array_map('trim', explode('|', $mensaje)), static fn (string $parte): bool => $parte !== ''));
         return $this->limitar(end($partes) ?: $mensaje, 190);
+    }
+
+    private function respuestaPacExitosa(mixed $valor): bool
+    {
+        if (is_bool($valor)) {
+            return $valor;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return (float) $valor !== 0.0;
+        }
+        if (is_string($valor)) {
+            $valor = trim($valor);
+            return $valor !== '' && $valor !== '0';
+        }
+        return false;
     }
 
     /** @param array<string, string> $metadatos */

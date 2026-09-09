@@ -43,7 +43,7 @@ try {
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $accion = strtolower(trim((string) ($_GET['accion'] ?? '')));
-        if ($accion !== 'guardar') {
+        if (!in_array($accion, ['guardar', 'timbrar'], true)) {
             http_response_code(405);
             echo json_encode(['ok' => false, 'error' => 'La operación solicitada no existe.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             exit;
@@ -62,7 +62,6 @@ try {
             exit;
         }
 
-        /* TIMBRADO DESACTIVADO TEMPORALMENTE PARA PRUEBAS LOCALES.
         $servicioTimbrado = new CfdiTimbradoServicio(
             $conexion,
             dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma',
@@ -75,11 +74,9 @@ try {
         if ($accion === 'timbrar') {
             $facturaId = max(0, (int) ($datos['factura_id'] ?? 0));
             try {
-                $rutaPrevia = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma'
-                    . DIRECTORY_SEPARATOR . 'XML-factura-' . $facturaId . '.xml';
-                if (!is_file($rutaPrevia)) {
-                    (new FacturaPendienteAdministrador($conexion))->generarXml($facturaId);
-                }
+                // Se regenera antes de cada intento para usar la hora fiscal local actual
+                // y evitar enviar al PAC un XML antiguo o creado con otra zona horaria.
+                (new FacturaPendienteAdministrador($conexion))->generarXml($facturaId);
                 $timbrado = $servicioTimbrado->timbrar($facturaId, SesionEmpresa::empresaActual(), $usuarioId);
                 echo json_encode([
                     'ok' => true,
@@ -102,10 +99,7 @@ try {
             }
             exit;
         }
-        */
-
         $factura = (new FacturaCreacionAdministrador($conexion))->guardarFactura($datos);
-        /* TIMBRADO DESACTIVADO TEMPORALMENTE PARA PRUEBAS LOCALES.
         try {
             $timbrado = $servicioTimbrado->timbrar(
                 (int) $factura['id'],
@@ -139,11 +133,10 @@ try {
         $factura['uuid'] = $timbrado['uuid'];
         $factura['fecha_timbrado'] = $timbrado['fecha_timbrado'];
         $factura['ambiente'] = $timbrado['ambiente'];
-        */
         $_SESSION['facturacion_csrf'] = bin2hex(random_bytes(32));
         echo json_encode([
             'ok' => true,
-            'mensaje' => 'La factura y su XML sin firma fueron generados correctamente.',
+            'mensaje' => 'La factura fue guardada y timbrada correctamente.',
             'factura' => $factura,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         exit;

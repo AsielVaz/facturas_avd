@@ -58,7 +58,8 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . '<div><small class="d-block text-uppercase text-muted fw-semibold">Tipo de factura</small>'
     . '<div class="form-check form-switch mb-0"><input id="invoiceTypeSwitch" class="form-check-input" type="checkbox" role="switch" '
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
-    . ($facturaCompletaInicial ? 'Factura completa' : 'Factura sencilla') . '</label></div></div></div>'
+    . ($facturaCompletaInicial ? 'Factura completa' : 'Factura sencilla') . '</label></div>'
+    . '<small id="invoiceTypeHint" class="d-block text-muted">Selección manual; el RFC ajusta los impuestos.</small></div></div>'
     . '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a></div>';
 require 'templates/page-start.php';
 ?>
@@ -87,7 +88,7 @@ require 'templates/page-start.php';
     <?php else: ?>
         <div class="alert alert-info d-flex align-items-start gap-2">
             <i data-lucide="shield-check" class="fs-19 mt-1 flex-shrink-0"></i>
-            <div><strong>Preparador CFDI en modo seguro.</strong> Consulta datos reales y valida los cálculos, pero no inserta, actualiza, sella ni timbra registros en la base de datos.</div>
+            <div><strong>Preparador CFDI.</strong> La vista previa valida los datos sin guardarlos. Al confirmar, la factura se guardará y se enviará a timbrar.</div>
         </div>
     <?php endif; ?>
 
@@ -152,8 +153,9 @@ require 'templates/page-start.php';
                             <div id="paymentFormGroup" class="<?= $facturaCompletaInicial ? 'col-md-6' : 'col-12' ?>"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div id="cfdiUseGroup" class="col-md-7<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-5 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
-                            <div class="col-md-6 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para los ejemplos del cliente: 10%.</small></div>
-                            <div class="col-md-6 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Usa 10.6667% solamente cuando corresponda.</small></div>
+                            <div id="vatRateGroup" class="<?= $facturaCompletaInicial ? 'col-md-4' : 'col-12' ?>"><label for="vatRateDisplay" class="form-label">IVA trasladado</label><input id="vatRateDisplay" class="form-control invoice-readonly" value="Selecciona un perfil fiscal" readonly><small id="vatRateHelp" class="text-muted">La tasa se calcula en cada concepto.</small></div>
+                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para persona moral: 10%.</small></div>
+                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para persona moral: 10.6667%.</small></div>
                         </div>
                     </div>
                 </div>
@@ -195,7 +197,7 @@ require 'templates/page-start.php';
         <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
             <div class="modal-header"><div><h5 class="modal-title">Vista previa CFDI 4.0</h5><p class="text-muted mb-0 fs-13"><?= $modoEdicion ? 'Cambios guardados en la factura pendiente; aún no tiene validez fiscal.' : 'Documento no persistido y sin validez fiscal.' ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body" id="previewContent"></div>
-            <div class="modal-footer"><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>">Guardar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
+            <div class="modal-footer"><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>">Guardar y timbrar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
         </div></div>
     </div>
 <?php endif; ?>
@@ -225,8 +227,12 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const useGroup = document.getElementById('cfdiUseGroup');
     const invoiceTypeSwitch = document.getElementById('invoiceTypeSwitch');
     const invoiceTypeLabel = document.getElementById('invoiceTypeLabel');
+    const invoiceTypeHint = document.getElementById('invoiceTypeHint');
     const advancedFields = [...document.querySelectorAll('.invoice-advanced-field')];
     const exportSelect = document.getElementById('exportSelect');
+    const vatRateGroup = document.getElementById('vatRateGroup');
+    const vatRateDisplay = document.getElementById('vatRateDisplay');
+    const vatRateHelp = document.getElementById('vatRateHelp');
     const withholdingIsrInput = document.getElementById('withholdingIsrInput');
     const withholdingVatInput = document.getElementById('withholdingVatInput');
     const itemsBody = document.getElementById('invoiceItems');
@@ -240,6 +246,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     let profiles = new Map();
     let rowSequence = 0;
     let validatedPayload = null;
+    let receiverPersonType = '';
 
     function money(value) {
         const currency = selectedCode(currencySelect) || 'MXN';
@@ -268,6 +275,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         useGroup.classList.toggle('d-none', !complete);
         paymentFormGroup.classList.toggle('col-md-6', complete);
         paymentFormGroup.classList.toggle('col-12', !complete);
+        vatRateGroup.classList.toggle('col-md-4', complete);
+        vatRateGroup.classList.toggle('col-12', !complete);
         exportSelect.required = complete;
         paymentMethodSelect.required = complete;
         useSelect.required = complete;
@@ -276,7 +285,59 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             if (pueOption) paymentMethodSelect.value = pueOption.value;
             useSelect.value = 'G03';
         }
+        updateVatDisplay();
         calculate();
+    }
+
+    function personTypeFromRfc(rfc) {
+        const length = String(rfc || '').toUpperCase().replace(/[^A-Z0-9Ñ&]/g, '').length;
+        if (length === 13) return 'fisica';
+        if (length === 12) return 'moral';
+        return '';
+    }
+
+    function updateVatDisplay() {
+        if (receiverPersonType === 'moral') {
+            vatRateDisplay.value = '0% o 16% según concepto';
+            vatRateHelp.textContent = 'La factura puede combinar conceptos con ambas tasas.';
+            return;
+        }
+        if (receiverPersonType === 'fisica') {
+            vatRateDisplay.value = '16%';
+            vatRateHelp.textContent = 'Se aplica 16% a los conceptos gravados.';
+            return;
+        }
+        vatRateDisplay.value = 'Selecciona un perfil fiscal';
+        vatRateHelp.textContent = 'El IVA se determinará con la longitud del RFC receptor.';
+    }
+
+    function resetReceiverTaxRule() {
+        receiverPersonType = '';
+        invoiceTypeSwitch.disabled = false;
+        invoiceTypeHint.textContent = 'Selección manual; el RFC ajusta los impuestos.';
+        withholdingIsrInput.value = '0';
+        withholdingVatInput.value = '0';
+        applyInvoiceType();
+    }
+
+    function applyReceiverTaxRule(profile) {
+        receiverPersonType = personTypeFromRfc(profile?.rfc);
+        if (!receiverPersonType) {
+            invoiceTypeSwitch.disabled = false;
+            invoiceTypeHint.textContent = 'RFC no clasificable; la selección del tipo sigue siendo manual.';
+            updateVatDisplay();
+            calculate();
+            return;
+        }
+        const moral = receiverPersonType === 'moral';
+        invoiceTypeSwitch.disabled = false;
+        invoiceTypeHint.textContent = moral
+            ? 'Persona moral detectada; elige sencilla o completa.'
+            : 'Persona física detectada; elige sencilla o completa.';
+        withholdingIsrInput.value = moral ? '10' : '0';
+        withholdingVatInput.value = moral ? '10.6667' : '0';
+        applyInvoiceType();
+        [...itemsBody.rows].forEach(row => conceptChanged(row, false));
     }
 
     function showMessages(errors, warnings) {
@@ -289,6 +350,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     async function loadProfiles() {
         profiles = new Map();
+        resetReceiverTaxRule();
         profileSelect.disabled = true;
         profileSelect.replaceChildren(new Option('Cargando perfiles...', ''));
         receiverSummary.className = 'invoice-fiscal-summary border rounded-3 p-3 bg-body-tertiary text-muted d-flex align-items-center';
@@ -323,17 +385,23 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     function showProfile() {
         const profile = profiles.get(profileSelect.value);
         if (!profile) {
+            resetReceiverTaxRule();
             receiverSummary.className = 'invoice-fiscal-summary border rounded-3 p-3 bg-body-tertiary text-muted d-flex align-items-center';
             receiverSummary.textContent = 'Selecciona el perfil fiscal que se usará como receptor.';
             return;
         }
+        const detectedPersonType = personTypeFromRfc(profile.rfc);
+        const personBadge = detectedPersonType
+            ? '<span class="badge badge-soft-info">Persona ' + (detectedPersonType === 'fisica' ? 'física' : 'moral') + '</span>'
+            : '';
         receiverSummary.className = 'invoice-fiscal-summary border rounded-3 p-3 ' + (profile.completo ? 'border-success bg-success-subtle' : 'border-danger bg-danger-subtle');
         const title = document.createElement('div');
-        title.innerHTML = '<div class="d-flex flex-wrap justify-content-between gap-2"><strong>' + escapeHtml(profile.razon_social) + '</strong><span class="badge ' + (profile.completo ? 'badge-soft-success' : 'badge-soft-danger') + '">' + (profile.completo ? 'Perfil completo' : 'Perfil incompleto') + '</span></div>' +
+        title.innerHTML = '<div class="d-flex flex-wrap justify-content-between gap-2"><strong>' + escapeHtml(profile.razon_social) + '</strong><span class="d-flex gap-1">' + personBadge + '<span class="badge ' + (profile.completo ? 'badge-soft-success' : 'badge-soft-danger') + '">' + (profile.completo ? 'Perfil completo' : 'Perfil incompleto') + '</span></span></div>' +
             '<div class="mt-2"><span class="font-monospace me-3">RFC ' + escapeHtml(profile.rfc) + '</span><span class="me-3">CP ' + escapeHtml(profile.cp || '—') + '</span><span>Régimen ' + escapeHtml(profile.regimen_fiscal || '—') + '</span></div>' +
             (profile.errores.length ? '<small class="d-block text-danger mt-2">' + escapeHtml(profile.errores.join(' ')) + '</small>' : '');
         receiverSummary.replaceChildren(title);
         filterUses(profile.tipo_persona, profile.regimen_fiscal);
+        applyReceiverTaxRule(profile);
     }
 
     function filterUses(personType, regime) {
@@ -395,8 +463,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         const discount = Number(row.querySelector('.item-discount').value) || 0;
         const subtotal = quantity * price;
         const base = Math.max(0, subtotal - discount);
-        const tax = concept?.objeto_impuesto === '02' ? base * (Number(concept.tasa_iva) / 100) : 0;
-        return {concept, quantity, price, discount, subtotal, tax, total: base + tax};
+        const taxRate = receiverPersonType === 'fisica' && concept?.objeto_impuesto === '02'
+            ? 16
+            : Number(concept?.tasa_iva) || 0;
+        const tax = concept?.objeto_impuesto === '02' ? base * (taxRate / 100) : 0;
+        return {concept, quantity, price, discount, subtotal, taxRate, tax, total: base + tax};
     }
 
     function calculate() {
@@ -441,13 +512,17 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         row.querySelector('.item-price').removeAttribute('max');
         if (concept.unidades_max) row.querySelector('.item-quantity').max = concept.unidades_max;
         else row.querySelector('.item-quantity').removeAttribute('max');
-        help.textContent = concept.clave_unidad_medida + ' · ObjetoImp ' + concept.objeto_impuesto + ' · IVA ' + concept.tasa_iva + '% · Precio sugerido ' + money(concept.precio_min);
+        const taxRate = receiverPersonType === 'fisica' && concept.objeto_impuesto === '02'
+            ? 16
+            : concept.tasa_iva;
+        help.textContent = concept.clave_unidad_medida + ' · ObjetoImp ' + concept.objeto_impuesto + ' · IVA ' + taxRate + '% · Precio sugerido ' + money(concept.precio_min);
         calculate();
     }
 
     function payload() {
         return {
             csrf: config.csrf,
+            tipo_factura: isCompleteInvoice() ? 'completa' : 'sencilla',
             factura_id: editing?.id || 0,
             huella: editing?.huella || '',
             fecha: document.getElementById('invoiceDate').value,
@@ -513,12 +588,19 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     itemsBody.addEventListener('input', calculate);
     withholdingIsrInput.addEventListener('input', calculate);
     withholdingVatInput.addEventListener('input', calculate);
-    invoiceTypeSwitch.addEventListener('change', applyInvoiceType);
+    invoiceTypeSwitch.addEventListener('change', () => {
+        const profile = profiles.get(profileSelect.value);
+        if (profile) {
+            applyReceiverTaxRule(profile);
+            return;
+        }
+        applyInvoiceType();
+    });
     saveInvoiceButton?.addEventListener('click', async () => {
         if (!validatedPayload || saveInvoiceButton.disabled) return;
         previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
         saveInvoiceButton.disabled = true;
-        saveInvoiceButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+        saveInvoiceButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando y timbrando...';
         try {
             const response = await fetch('api/facturas.php?accion=guardar', {
                 method: 'POST',
@@ -533,7 +615,10 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 error.invoice = data.factura || null;
                 throw error;
             }
-            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert alert-success save-invoice-feedback"><strong>' + escapeHtml(data.mensaje) + '</strong><div class="mt-1">Folio ' + escapeHtml(data.factura.serie + '-' + data.factura.folio) + ' · <a href="' + escapeHtml(data.factura.xml.url) + '" download>Descargar XML sin firma</a> · <a href="api/factura-pdf.php?id=' + encodeURIComponent(data.factura.id) + '" download>Descargar PDF de prueba</a></div></div>');
+            const invoiceWasStamped = Boolean(data.factura.uuid);
+            const xmlLabel = invoiceWasStamped ? 'Descargar XML timbrado' : 'Descargar XML sin firma';
+            const pdfLabel = invoiceWasStamped ? 'Descargar PDF' : 'Descargar PDF de prueba';
+            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert alert-success save-invoice-feedback"><strong>' + escapeHtml(data.mensaje) + '</strong><div class="mt-1">Folio ' + escapeHtml(data.factura.serie + '-' + data.factura.folio) + ' · <a href="' + escapeHtml(data.factura.xml.url) + '" download>' + xmlLabel + '</a> · <a href="api/factura-pdf.php?id=' + encodeURIComponent(data.factura.id) + '" download>' + pdfLabel + '</a></div></div>');
             saveInvoiceButton.innerHTML = '<i data-lucide="circle-check" class="fs-17 me-1"></i>Factura guardada';
             validatedPayload = null;
             if (window.lucide) window.lucide.createIcons();
@@ -545,7 +630,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             saveInvoiceButton.disabled = error.saved;
             saveInvoiceButton.innerHTML = error.saved
                 ? '<i data-lucide="alert-triangle" class="fs-17 me-1"></i>Guardada sin timbrar'
-                : '<i data-lucide="save" class="fs-17 me-1"></i>Guardar factura';
+                : '<i data-lucide="save" class="fs-17 me-1"></i>Guardar y timbrar factura';
             if (error.saved) validatedPayload = null;
             if (window.lucide) window.lucide.createIcons();
         }

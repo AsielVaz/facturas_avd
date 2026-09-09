@@ -370,6 +370,12 @@ final class FacturacionAdministrador
         $ivaTotal = 0.0;
         $retencionIsrTotal = 0.0;
         $retencionIvaTotal = 0.0;
+        $tipoFactura = strtolower(trim((string) ($datos['tipo_factura'] ?? 'completa')));
+        if (!in_array($tipoFactura, ['sencilla', 'completa'], true)) {
+            $errores[] = 'Selecciona un tipo de factura válido.';
+            $tipoFactura = 'sencilla';
+        }
+        $facturaCompleta = $tipoFactura === 'completa';
         $retencionIsrTasa = round((float) ($datos['retencion_isr_tasa'] ?? 0), 6);
         $retencionIvaTasa = round((float) ($datos['retencion_iva_tasa'] ?? 0), 6);
         if (!is_finite($retencionIsrTasa) || $retencionIsrTasa < 0 || $retencionIsrTasa > 100) {
@@ -379,6 +385,19 @@ final class FacturacionAdministrador
         if (!is_finite($retencionIvaTasa) || $retencionIvaTasa < 0 || $retencionIvaTasa > 100) {
             $errores[] = 'La tasa de retención de IVA debe estar entre 0 y 100.';
             $retencionIvaTasa = 0.0;
+        }
+        $aplicaReglaReceptor = $perfil !== null;
+        $tipoPersonaReceptor = $perfil !== null ? (string) ($perfil['tipo_persona'] ?? '') : '';
+        if ($aplicaReglaReceptor && $tipoPersonaReceptor === 'moral' && $facturaCompleta) {
+            $retencionIsrTasa = 10.0;
+            $retencionIvaTasa = 10.6667;
+            $advertencias[] = 'Se aplicaron automáticamente las retenciones correspondientes al receptor persona moral.';
+        } elseif ($aplicaReglaReceptor) {
+            $retencionIsrTasa = 0.0;
+            $retencionIvaTasa = 0.0;
+            $advertencias[] = $tipoPersonaReceptor === 'fisica'
+                ? 'Se aplicó automáticamente IVA de 16% sin retenciones para receptor persona física.'
+                : 'La factura sencilla se generará sin retenciones.';
         }
         if ($retencionIsrTasa > 0 || $retencionIvaTasa > 0) {
             $advertencias[] = 'Confirma con el receptor las tasas de retención antes de enviar el comprobante al PAC.';
@@ -428,8 +447,12 @@ final class FacturacionAdministrador
             if ($concepto['objeto_impuesto'] === '02' && $base <= 0) {
                 $errores[] = "Partida {$numero}: la base de un concepto sujeto a impuesto debe ser mayor que cero.";
             }
+            $tasaIvaAplicada = (float) $concepto['tasa_iva'];
+            if ($aplicaReglaReceptor && $tipoPersonaReceptor === 'fisica' && $concepto['objeto_impuesto'] === '02') {
+                $tasaIvaAplicada = 16.0;
+            }
             $iva = $concepto['objeto_impuesto'] === '02'
-                ? round($base * ((float) $concepto['tasa_iva'] / 100), 6)
+                ? round($base * ($tasaIvaAplicada / 100), 6)
                 : 0.0;
             $retencionIsr = $concepto['objeto_impuesto'] === '02'
                 ? round($base * ($retencionIsrTasa / 100), 6)
@@ -458,7 +481,7 @@ final class FacturacionAdministrador
                 'importe' => round($importe, 2),
                 'descuento' => round($descuento, 2),
                 'objeto_impuesto' => $concepto['objeto_impuesto'],
-                'tasa_iva' => (float) $concepto['tasa_iva'],
+                'tasa_iva' => $tasaIvaAplicada,
                 'iva' => $iva,
                 'retencion_isr_tasa' => $retencionIsrTasa,
                 'retencion_isr' => $retencionIsr,
@@ -485,6 +508,7 @@ final class FacturacionAdministrador
             'advertencias' => array_values(array_unique($advertencias)),
             'comprobante' => [
                 'version' => '4.0',
+                'tipo_factura' => $tipoFactura,
                 'fecha' => ($fechaValida ?: new DateTimeImmutable('today'))->format('Y-m-d') . 'T' . (new DateTimeImmutable('now'))->format('H:i:s'),
                 'tipo_comprobante' => 'I',
                 'exportacion' => $exportacion,
@@ -517,6 +541,7 @@ final class FacturacionAdministrador
                 'domicilio_fiscal' => $perfil['cp'],
                 'regimen_fiscal' => $perfil['regimen_fiscal'],
                 'uso_cfdi' => $usoClave,
+                'tipo_persona' => $tipoPersonaReceptor,
             ],
             'partidas' => $partidas,
             'persistido' => false,

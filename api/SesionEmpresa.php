@@ -8,9 +8,12 @@ final class SesionEmpresa
     public const EMPRESA_POR_DEFECTO = 108;
     public const CLAVE_POR_DEFECTO = 952;
     public const URL_BASE_LOGOS = 'https://sistema14.com/app';
+    public const ZONA_HORARIA = 'America/Mexico_City';
 
     public static function iniciar(): void
     {
+        date_default_timezone_set(self::ZONA_HORARIA);
+
         if (session_status() !== PHP_SESSION_ACTIVE) {
             if (PHP_SAPI !== 'cli' && !headers_sent()) {
                 session_set_cookie_params([
