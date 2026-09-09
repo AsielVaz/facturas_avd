@@ -58,7 +58,7 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . '<div><small class="d-block text-uppercase text-muted fw-semibold">Tipo de factura</small>'
     . '<div class="form-check form-switch mb-0"><input id="invoiceTypeSwitch" class="form-check-input" type="checkbox" role="switch" '
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
-    . ($facturaCompletaInicial ? 'Factura completa' : 'Factura sencilla') . '</label></div>'
+    . ($facturaCompletaInicial ? 'Factura sencilla' : 'Factura completa') . '</label></div>'
     . '<small id="invoiceTypeHint" class="d-block text-muted">Selección manual; el RFC ajusta los impuestos.</small></div></div>'
     . '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a></div>';
 require 'templates/page-start.php';
@@ -269,7 +269,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function applyInvoiceType() {
         const complete = isCompleteInvoice();
-        invoiceTypeLabel.textContent = complete ? 'Factura completa' : 'Factura sencilla';
+        invoiceTypeLabel.textContent = complete ? 'Factura sencilla' : 'Factura completa';
         advancedFields.forEach(field => field.classList.toggle('d-none', !complete));
         paymentMethodGroup.classList.toggle('d-none', !complete);
         useGroup.classList.toggle('d-none', !complete);
@@ -618,7 +618,17 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             const invoiceWasStamped = Boolean(data.factura.uuid);
             const xmlLabel = invoiceWasStamped ? 'Descargar XML timbrado' : 'Descargar XML sin firma';
             const pdfLabel = invoiceWasStamped ? 'Descargar PDF' : 'Descargar PDF de prueba';
-            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert alert-success save-invoice-feedback"><strong>' + escapeHtml(data.mensaje) + '</strong><div class="mt-1">Folio ' + escapeHtml(data.factura.serie + '-' + data.factura.folio) + ' · <a href="' + escapeHtml(data.factura.xml.url) + '" download>' + xmlLabel + '</a> · <a href="api/factura-pdf.php?id=' + encodeURIComponent(data.factura.id) + '" download>' + pdfLabel + '</a></div></div>');
+            await Swal.fire({
+                icon: 'success',
+                title: 'Factura guardada y timbrada',
+                html: '<p class="mb-2">' + escapeHtml(data.mensaje) + '</p>'
+                    + '<div><strong>Folio:</strong> ' + escapeHtml(data.factura.serie + '-' + data.factura.folio) + '</div>'
+                    + (data.factura.uuid ? '<div class="mt-1"><strong>Folio fiscal:</strong><br><span class="font-monospace">' + escapeHtml(data.factura.uuid) + '</span></div>' : '')
+                    + '<div class="mt-3"><a href="' + escapeHtml(data.factura.xml.url) + '" download>' + xmlLabel + '</a>'
+                    + ' · <a href="api/factura-pdf.php?id=' + encodeURIComponent(data.factura.id) + '" download>' + pdfLabel + '</a></div>',
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#16a34a',
+            });
             saveInvoiceButton.innerHTML = '<i data-lucide="circle-check" class="fs-17 me-1"></i>Factura guardada';
             validatedPayload = null;
             if (window.lucide) window.lucide.createIcons();
@@ -626,7 +636,13 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             const details = error.details?.length ? error.details : [error.message];
             const title = error.saved ? 'La factura quedó guardada.' : 'No se pudo guardar la factura.';
             const savedInfo = error.saved && error.invoice ? '<div class="mt-2">Folio ' + escapeHtml(error.invoice.serie + '-' + error.invoice.folio) + ' · <a href="' + escapeHtml(error.invoice.xml.url) + '" download>Descargar XML sin firma</a></div>' : '';
-            previewContent.insertAdjacentHTML('afterbegin', '<div class="alert ' + (error.saved ? 'alert-warning' : 'alert-danger') + ' save-invoice-feedback"><strong>' + title + '</strong><ul class="mb-0 mt-2">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>' + savedInfo + '</div>');
+            await Swal.fire({
+                icon: error.saved ? 'warning' : 'error',
+                title: title,
+                html: '<ul class="text-start mb-0">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>' + savedInfo,
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: error.saved ? '#d97706' : '#dc2626',
+            });
             saveInvoiceButton.disabled = error.saved;
             saveInvoiceButton.innerHTML = error.saved
                 ? '<i data-lucide="alert-triangle" class="fs-17 me-1"></i>Guardada sin timbrar'
