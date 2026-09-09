@@ -259,6 +259,27 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         return node.innerHTML;
     }
 
+    async function readApiJson(response, operation) {
+        const body = await response.text();
+        if (!body.trim()) {
+            const error = new Error('El servidor no devolvió información al intentar ' + operation + '.');
+            error.httpStatus = response.status;
+            error.stage = 'respuesta del servidor';
+            throw error;
+        }
+        try {
+            return JSON.parse(body);
+        } catch (parseError) {
+            const error = new Error(
+                'El servidor devolvió una respuesta no válida al intentar ' + operation
+                + '. Esto suele indicar un error de PHP o de configuración en producción.'
+            );
+            error.httpStatus = response.status;
+            error.stage = 'respuesta del servidor';
+            throw error;
+        }
+    }
+
     function selectedCode(select) {
         return select.options[select.selectedIndex]?.dataset.clave || '';
     }
@@ -607,12 +628,15 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
                 body: JSON.stringify(validatedPayload),
             });
-            const data = await response.json();
+            const data = await readApiJson(response, 'guardar y timbrar la factura');
             if (!response.ok || !data.ok) {
                 const error = new Error(data.error || 'No fue posible guardar la factura.');
-                error.details = data.errores || [];
+                error.details = Array.isArray(data.errores) ? data.errores : [];
                 error.saved = data.guardada === true;
                 error.invoice = data.factura || null;
+                error.httpStatus = response.status;
+                error.stage = data.etapa || (error.saved ? 'timbrado' : 'guardado');
+                error.reference = data.referencia || '';
                 throw error;
             }
             const invoiceWasStamped = Boolean(data.factura.uuid);
@@ -633,13 +657,27 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             validatedPayload = null;
             if (window.lucide) window.lucide.createIcons();
         } catch (error) {
-            const details = error.details?.length ? error.details : [error.message];
+            const receivedDetails = Array.isArray(error.details)
+                ? error.details.filter(detail => typeof detail === 'string' && detail.trim() !== '')
+                : [];
+            let fallbackMessage = typeof error.message === 'string' && error.message.trim() !== ''
+                ? error.message
+                : 'Ocurrió un error desconocido durante la facturación.';
+            if (error instanceof TypeError && /fetch|network|conexi[oó]n|failed/i.test(fallbackMessage)) {
+                fallbackMessage = 'No fue posible conectar con el servidor. Revisa la conexión y confirma en Facturas pendientes si la factura alcanzó a guardarse antes de volver a intentarlo.';
+            }
+            const details = receivedDetails.length ? receivedDetails : [fallbackMessage];
             const title = error.saved ? 'La factura quedó guardada.' : 'No se pudo guardar la factura.';
             const savedInfo = error.saved && error.invoice ? '<div class="mt-2">Folio ' + escapeHtml(error.invoice.serie + '-' + error.invoice.folio) + ' · <a href="' + escapeHtml(error.invoice.xml.url) + '" download>Descargar XML sin firma</a></div>' : '';
+            const diagnostics = '<hr class="my-3"><div class="small text-muted text-start">'
+                + (error.stage ? '<div><strong>Etapa:</strong> ' + escapeHtml(error.stage) + '</div>' : '')
+                + (error.httpStatus ? '<div><strong>Respuesta HTTP:</strong> ' + escapeHtml(error.httpStatus) + '</div>' : '')
+                + (error.reference ? '<div><strong>Referencia técnica:</strong> <span class="font-monospace">' + escapeHtml(error.reference) + '</span></div>' : '')
+                + '</div>';
             await Swal.fire({
                 icon: error.saved ? 'warning' : 'error',
                 title: title,
-                html: '<ul class="text-start mb-0">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>' + savedInfo,
+                html: '<ul class="text-start mb-0">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>' + savedInfo + diagnostics,
                 confirmButtonText: 'Aceptar',
                 confirmButtonColor: error.saved ? '#d97706' : '#dc2626',
             });

@@ -11,6 +11,25 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 
+/** Registra el detalle técnico sin exponerlo al navegador y devuelve una referencia rastreable. */
+function registrarErrorFactura(Throwable $error, string $etapa): string
+{
+    $referencia = 'FAC-' . strtoupper(substr(hash(
+        'sha256',
+        microtime(true) . '|' . $etapa . '|' . $error->getMessage() . '|' . $error->getLine()
+    ), 0, 10));
+    error_log(sprintf(
+        '[%s] Error en %s (%s): %s en %s:%d',
+        $referencia,
+        $etapa,
+        $error::class,
+        $error->getMessage(),
+        $error->getFile(),
+        $error->getLine()
+    ));
+    return $referencia;
+}
+
 try {
     SesionEmpresa::iniciar();
     $conexion = Conexion::obtener();
@@ -95,6 +114,7 @@ try {
                     'ok' => false,
                     'error' => $error->getMessage(),
                     'errores' => $error instanceof FacturaPendienteValidacionException ? $error->errores : [],
+                    'etapa' => 'timbrado',
                 ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             }
             exit;
@@ -114,17 +134,20 @@ try {
                 'guardada' => true,
                 'error' => 'La factura se guardó, pero no pudo timbrarse: ' . $error->getMessage(),
                 'factura' => $factura,
+                'etapa' => 'timbrado',
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
             exit;
         } catch (Throwable $error) {
-            error_log('Error al persistir el timbrado de la factura ' . (int) $factura['id'] . ': ' . $error->getMessage());
+            $referencia = registrarErrorFactura($error, 'registro del timbrado de la factura ' . (int) $factura['id']);
             $_SESSION['facturacion_csrf'] = bin2hex(random_bytes(32));
             http_response_code(500);
             echo json_encode([
                 'ok' => false,
                 'guardada' => true,
-                'error' => 'La factura se guardó, pero no fue posible completar el registro del timbrado.',
+                'error' => 'La factura se guardó, pero falló el registro local del timbrado. Proporciona la referencia ' . $referencia . ' al soporte técnico.',
                 'factura' => $factura,
+                'etapa' => 'registro del timbrado',
+                'referencia' => $referencia,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
             exit;
         }
@@ -166,18 +189,33 @@ try {
     http_response_code(422);
     echo json_encode(['ok' => false, 'error' => $error->getMessage(), 'errores' => $error->errores], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (CfdiXmlGeneracionException $error) {
-    error_log('Error al generar XML CFDI: ' . $error->getMessage());
+    $referencia = registrarErrorFactura($error, 'generación del XML');
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'No fue posible generar el XML de la factura.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    echo json_encode([
+        'ok' => false,
+        'error' => 'No fue posible generar el XML: ' . $error->getMessage(),
+        'etapa' => 'generación del XML',
+        'referencia' => $referencia,
+    ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (PDOException $error) {
-    error_log('Error al guardar factura: ' . $error->getMessage());
+    $referencia = registrarErrorFactura($error, 'base de datos');
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'No fue posible guardar la factura.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    echo json_encode([
+        'ok' => false,
+        'error' => 'La base de datos rechazó la operación. No vuelvas a crear la factura hasta verificar si quedó registrada. Referencia: ' . $referencia . '.',
+        'etapa' => 'base de datos',
+        'referencia' => $referencia,
+    ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (RuntimeException $error) {
     http_response_code(422);
-    echo json_encode(['ok' => false, 'error' => $error->getMessage()], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    echo json_encode(['ok' => false, 'error' => $error->getMessage(), 'etapa' => 'validación'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $error) {
-    error_log('Error inesperado al generar factura: ' . $error->getMessage());
+    $referencia = registrarErrorFactura($error, 'proceso de facturación');
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'No fue posible generar la factura.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    echo json_encode([
+        'ok' => false,
+        'error' => 'Ocurrió un error interno durante la facturación. Referencia: ' . $referencia . '.',
+        'etapa' => 'proceso de facturación',
+        'referencia' => $referencia,
+    ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 }
