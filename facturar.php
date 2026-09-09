@@ -58,7 +58,7 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . '<div><small class="d-block text-uppercase text-muted fw-semibold">Tipo de factura</small>'
     . '<div class="form-check form-switch mb-0"><input id="invoiceTypeSwitch" class="form-check-input" type="checkbox" role="switch" '
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
-    . ($facturaCompletaInicial ? 'Factura sencilla' : 'Factura completa') . '</label></div>'
+    . ($facturaCompletaInicial ? 'Factura sencilla' : 'Factura avanzada') . '</label></div>'
     . '<small id="invoiceTypeHint" class="d-block text-muted">Selección manual; el RFC ajusta los impuestos.</small></div></div>'
     . '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a></div>';
 require 'templates/page-start.php';
@@ -290,7 +290,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function applyInvoiceType() {
         const complete = isCompleteInvoice();
-        invoiceTypeLabel.textContent = complete ? 'Factura sencilla' : 'Factura completa';
+        invoiceTypeLabel.textContent = complete ? 'Factura sencilla' : 'Factura avanzada';
         advancedFields.forEach(field => field.classList.toggle('d-none', !complete));
         paymentMethodGroup.classList.toggle('d-none', !complete);
         useGroup.classList.toggle('d-none', !complete);
