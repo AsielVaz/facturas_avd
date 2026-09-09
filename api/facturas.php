@@ -30,6 +30,20 @@ function registrarErrorFactura(Throwable $error, string $etapa): string
     return $referencia;
 }
 
+/** Devuelve el diagnóstico de MySQL sin incluir consultas completas ni valores extensos sensibles. */
+function detalleSeguroBaseDatos(PDOException $error): string
+{
+    $estadoSql = trim((string) ($error->errorInfo[0] ?? $error->getCode() ?: 'desconocido'));
+    $codigo = trim((string) ($error->errorInfo[1] ?? 'desconocido'));
+    $mensaje = trim((string) ($error->errorInfo[2] ?? $error->getMessage()));
+    $mensaje = preg_replace('/[\r\n\t]+/', ' ', $mensaje) ?: 'MySQL no proporcionó detalles.';
+    $mensaje = preg_replace('/[A-Za-z0-9+\/=]{80,}/', '[valor extenso oculto]', $mensaje) ?: $mensaje;
+    $mensaje = function_exists('mb_substr')
+        ? mb_substr($mensaje, 0, 350, 'UTF-8')
+        : substr($mensaje, 0, 350);
+    return 'MySQL ' . $codigo . ' · SQLSTATE ' . $estadoSql . ': ' . $mensaje;
+}
+
 try {
     SesionEmpresa::iniciar();
     $conexion = Conexion::obtener();
@@ -199,10 +213,12 @@ try {
     ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (PDOException $error) {
     $referencia = registrarErrorFactura($error, 'base de datos');
+    $detalle = detalleSeguroBaseDatos($error);
     http_response_code(500);
     echo json_encode([
         'ok' => false,
         'error' => 'La base de datos rechazó la operación. No vuelvas a crear la factura hasta verificar si quedó registrada. Referencia: ' . $referencia . '.',
+        'errores' => [$detalle],
         'etapa' => 'base de datos',
         'referencia' => $referencia,
     ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
