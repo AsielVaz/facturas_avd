@@ -15,8 +15,14 @@ final class SesionEmpresa
         date_default_timezone_set(self::ZONA_HORARIA);
 
         if (session_status() !== PHP_SESSION_ACTIVE) {
+            ini_set('session.use_strict_mode', '1');
+            ini_set('session.use_only_cookies', '1');
+            ini_set('session.use_trans_sid', '0');
+            session_name('FACTURAS_AVD_SESSION');
             if (PHP_SAPI !== 'cli' && !headers_sent()) {
                 session_set_cookie_params([
+                    'lifetime' => 0,
+                    'path' => '/',
                     'httponly' => true,
                     'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
                     'samesite' => 'Lax',

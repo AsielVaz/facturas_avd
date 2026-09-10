@@ -6,6 +6,8 @@ require_once __DIR__ . '/FacturaAdministrador.php';
 require_once __DIR__ . '/FacturaCreacionAdministrador.php';
 require_once __DIR__ . '/FacturaPendienteAdministrador.php';
 require_once __DIR__ . '/CfdiTimbradoServicio.php';
+require_once __DIR__ . '/Autenticacion.php';
+Autenticacion::exigirApi();
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');

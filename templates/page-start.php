@@ -1,7 +1,12 @@
 <?php
 require_once dirname(__DIR__) . '/api/SesionEmpresa.php';
 require_once dirname(__DIR__) . '/api/Conexion.php';
-SesionEmpresa::iniciar();
+require_once dirname(__DIR__) . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
+header('Cache-Control: private, no-store');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
 try {
     SesionEmpresa::sincronizarContexto(Conexion::obtener());
 } catch (Throwable $error) {

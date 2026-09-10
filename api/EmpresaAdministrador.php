@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Conexion.php';
 require_once __DIR__ . '/SesionEmpresa.php';
+require_once __DIR__ . '/Autenticacion.php';
 
 final class EmpresaAdministrador
 {
@@ -14,6 +15,7 @@ final class EmpresaAdministrador
     /** @return array<int, array<string, mixed>> */
     public function listar(): array
     {
+        $restringido = Autenticacion::accesoRestringidoAEmpresas();
         $sql = "SELECT
                     e.id AS empresa_id,
                     e.razon AS empresa,
@@ -33,13 +35,27 @@ final class EmpresaAdministrador
                         WHERE TRIM(COALESCE(e.rfc, '')) <> ''
                           AND UPPER(TRIM(cc2.rfc)) = UPPER(TRIM(e.rfc))
                     )
+                " . ($restringido
+                    ? "WHERE EXISTS (
+                           SELECT 1 FROM cliente_empresa ce
+                           WHERE ce.id_usuario = :usuario AND ce.id_empresa = e.id
+                       )"
+                    : '') . "
                 ORDER BY e.razon, e.id";
-        return $this->conexion->query($sql)->fetchAll();
+        $consulta = $this->conexion->prepare($sql);
+        if ($restringido) {
+            $consulta->bindValue(':usuario', Autenticacion::usuarioActualId(), PDO::PARAM_INT);
+        }
+        $consulta->execute();
+        return $consulta->fetchAll();
     }
 
     /** @return array{empresa: int, clave: int, nombre: string} */
     public function seleccionar(int $empresaId, int $claveId): array
     {
+        if (!Autenticacion::puedeUsarEmpresa($this->conexion, $empresaId)) {
+            throw new RuntimeException('Tu usuario no tiene permiso para utilizar esta empresa.');
+        }
         $consulta = $this->conexion->prepare(
             "SELECT e.id AS empresa_id, e.razon, e.logo, cc.id AS clave_id
              FROM empresas e

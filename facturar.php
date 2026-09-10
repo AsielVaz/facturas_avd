@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/api/FacturaPendienteAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
 
-SesionEmpresa::iniciar();
+Autenticacion::exigirPagina();
 $_SESSION['facturacion_csrf'] ??= bin2hex(random_bytes(32));
 $facturaId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 $modoEdicion = $facturaId > 0;

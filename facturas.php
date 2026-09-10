@@ -5,6 +5,8 @@ $activeModule = 'facturas';
 $activePage = 'facturas';
 $pageAction = '<a class="btn btn-primary" href="facturar.php"><i data-lucide="plus" class="fs-18 me-1"></i>Nueva factura</a>';
 require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
 $invoiceError = '';
 try {
     $invoiceData = (new FacturaVistaAdministrador(new FacturaAdministrador(Conexion::obtener())))->cargar('timbradas', $_GET);

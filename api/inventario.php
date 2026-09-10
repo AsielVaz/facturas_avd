@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/InventarioAdministrador.php';
+require_once __DIR__ . '/Autenticacion.php';
+Autenticacion::exigirApi();
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');

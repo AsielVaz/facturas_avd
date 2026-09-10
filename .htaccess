@@ -1,1 +1,5 @@
-DirectoryIndex facturas.php index.php index.html
+DirectoryIndex index.php facturas.php index.html
+
+<FilesMatch "^(?:\.env|composer\.(?:json|lock)|README\.md)$">
+    Require all denied
+</FilesMatch>

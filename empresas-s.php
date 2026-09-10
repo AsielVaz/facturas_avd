@@ -1,8 +1,9 @@
 <?php
 
 require_once __DIR__ . '/api/EmpresaAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
 
-SesionEmpresa::iniciar();
+Autenticacion::exigirPagina();
 $companyManager = new EmpresaAdministrador(Conexion::obtener());
 $selectionError = '';
 $_SESSION['empresas_csrf'] ??= bin2hex(random_bytes(32));
@@ -21,7 +22,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             header('Location: empresas-s.php?seleccion=ok');
             exit;
         } catch (Throwable $error) {
-            $selectionError = 'No fue posible seleccionar la empresa porque su RFC no coincide con la clave corta.';
+            $selectionError = $error->getMessage() === 'Tu usuario no tiene permiso para utilizar esta empresa.'
+                ? $error->getMessage()
+                : 'No fue posible seleccionar la empresa porque su RFC no coincide con la clave corta.';
         }
     }
 }
@@ -31,6 +34,43 @@ try {
 } catch (Throwable $error) {
     $companies = [];
     $selectionError = 'No fue posible consultar la tabla de empresas.';
+}
+
+if (Autenticacion::accesoRestringidoAEmpresas() && $companies === []) {
+    http_response_code(403);
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    ?>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Sin empresa asignada | ERP Dinámico</title>
+        <link href="assets/css/vendor.min.css" rel="stylesheet">
+        <link href="assets/css/app.min.css" rel="stylesheet">
+    </head>
+    <body>
+        <main class="min-vh-100 d-flex align-items-center justify-content-center p-3">
+            <section class="card shadow-sm" style="max-width:560px;width:100%">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <div class="avatar-lg bg-warning-subtle text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3">
+                        <span class="fs-2">!</span>
+                    </div>
+                    <h3 class="mb-2">Sin empresa asignada</h3>
+                    <p class="text-muted mb-4">El usuario <?= htmlspecialchars(Autenticacion::nombreActual()) ?> todavía no tiene una empresa disponible. Solicita al administrador que agregue la relación correspondiente en <code>cliente_empresa</code>.</p>
+                    <form method="post" action="logout.php">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars(Autenticacion::tokenLogout()) ?>">
+                        <button class="btn btn-primary" type="submit">Cerrar sesión</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </body>
+    </html>
+    <?php
+    exit;
 }
 
 $currentCompany = SesionEmpresa::empresaActual();
@@ -49,6 +89,9 @@ require 'templates/page-start.php';
 <?php if (($_GET['seleccion'] ?? '') === 'ok'): ?>
     <div class="alert alert-success d-flex align-items-center"><i data-lucide="circle-check" class="fs-19 me-2"></i><div><strong>Empresa actualizada.</strong> Todos los modulos ahora utilizan la empresa <?= $currentCompany ?> y la clave <?= $currentKey ?>.</div></div>
 <?php endif; ?>
+<?php if (($_GET['sin_asignacion'] ?? '') === '1'): ?>
+    <div class="alert alert-warning"><i data-lucide="circle-alert" class="fs-18 me-2"></i>Tu usuario no tiene una empresa disponible. Solicita al administrador que agregue una relación en <code>cliente_empresa</code>.</div>
+<?php endif; ?>
 <?php if ($selectionError !== ''): ?>
     <div class="alert alert-danger"><i data-lucide="circle-alert" class="fs-18 me-2"></i><?= htmlspecialchars($selectionError) ?></div>
 <?php endif; ?>
@@ -56,7 +99,7 @@ require 'templates/page-start.php';
 <div class="row g-3 mb-4">
 <?php
 $cards = [
-    ['Empresas registradas', number_format(count($companies)), 'Registros de la tabla empresas', 'building-2', 'primary', 'Listado completo', 'primary'],
+    ['Empresas disponibles', number_format(count($companies)), 'Empresas permitidas para tu usuario', 'building-2', 'primary', 'Según tus permisos', 'primary'],
     ['Con clave corta', number_format($matchedCompanies), 'RFC con coincidencia exacta', 'link-2', 'success', 'Disponibles para seleccionar', 'success'],
     ['Sin coincidencia', number_format($unmatchedCompanies), 'RFC sin clave corta asociada', 'unlink', 'warning', 'Requieren configuracion', 'warning'],
     ['Empresa activa', '#' . $currentCompany, 'Clave actual #' . $currentKey, 'badge-check', 'info', 'Valores de sesion', 'info'],
@@ -73,7 +116,7 @@ foreach ($cards as $card) {
     <div class="card-body border-bottom">
         <div class="row g-2 align-items-center">
             <div class="col-lg-7"><div class="search-bar"><span><i data-lucide="search"></i></span><input id="companySearch" type="search" class="form-control" placeholder="Buscar empresa, RFC o clave corta..."></div></div>
-            <div class="col-lg-5 text-lg-end"><span class="text-muted fs-13">La relacion se obtiene comparando <code>empresas.rfc</code> con <code>claves_cortas.rfc</code>.</span></div>
+            <div class="col-lg-5 text-lg-end"><span class="text-muted fs-13">El acceso se controla con <code>cliente_empresa</code>; la clave fiscal se obtiene comparando los RFC.</span></div>
         </div>
     </div>
     <div class="table-responsive">
@@ -109,7 +152,7 @@ foreach ($cards as $card) {
             </tbody>
         </table>
     </div>
-    <div class="card-body border-top py-3"><span class="text-muted fs-13">Mostrando expresamente <?= count($companies) ?> registros de la tabla <code>empresas</code>.</span></div>
+    <div class="card-body border-top py-3"><span class="text-muted fs-13">Mostrando <?= count($companies) ?> empresas disponibles para el usuario actual.</span></div>
 </div>
 
 <?php

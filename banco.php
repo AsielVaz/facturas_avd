@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/api/BancoAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
 
 $bankManager = new BancoAdministrador(Conexion::obtener());
 $currentCompany = SesionEmpresa::empresaActual();

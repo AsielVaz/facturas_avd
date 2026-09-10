@@ -37,8 +37,8 @@
                 <div class="dropdown topbar-item">
                     <a class="topbar-button p-0" href="#" data-bs-toggle="dropdown" aria-expanded="false">
                         <span class="d-flex align-items-center gap-2">
-                            <img class="rounded-circle" width="32" src="assets/images/users/avatar-1.jpg" alt="Usuario">
-                            <span class="d-lg-flex flex-column d-none"><span class="text-reset fs-14 fw-medium">Administrador</span><small class="text-muted">Control general</small></span>
+                            <img class="rounded-circle" width="32" height="32" src="<?= htmlspecialchars(Autenticacion::avatarActual()) ?>" alt="Usuario">
+                            <span class="d-lg-flex flex-column d-none"><span class="text-reset fs-14 fw-medium"><?= htmlspecialchars(Autenticacion::nombreActual()) ?></span><small class="text-muted"><?= htmlspecialchars(Autenticacion::tipoActual()) ?></small></span>
                         </span>
                     </a>
                     <div class="dropdown-menu dropdown-menu-end">
@@ -46,7 +46,7 @@
                         <a class="dropdown-item" href="#"><i data-lucide="user" class="fs-16 text-muted align-middle me-2"></i>Mi perfil</a>
                         <a class="dropdown-item" href="#"><i data-lucide="settings" class="fs-16 text-muted align-middle me-2"></i>Configuracion</a>
                         <div class="dropdown-divider"></div>
-                        <a class="dropdown-item" href="#"><i data-lucide="log-out" class="fs-16 text-muted align-middle me-2"></i>Cerrar sesion</a>
+                        <form method="post" action="logout.php"><input type="hidden" name="csrf" value="<?= htmlspecialchars(Autenticacion::tokenLogout()) ?>"><button class="dropdown-item" type="submit"><i data-lucide="log-out" class="fs-16 text-muted align-middle me-2"></i>Cerrar sesión</button></form>
                     </div>
                 </div>
             </div>

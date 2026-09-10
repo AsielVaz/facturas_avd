@@ -5,6 +5,8 @@ $activeModule = 'facturas';
 $activePage = 'facturas-timbradas';
 $pageAction = '<div class="btn-group"><button class="btn btn-soft-secondary"><i data-lucide="download" class="fs-17 me-1"></i>Exportar</button><button class="btn btn-primary"><i data-lucide="send" class="fs-17 me-1"></i>Enviar CFDI</button></div>';
 require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
 $invoiceError = '';
 try {
     $invoiceData = (new FacturaVistaAdministrador(new FacturaAdministrador(Conexion::obtener())))->cargar('timbradas', $_GET);

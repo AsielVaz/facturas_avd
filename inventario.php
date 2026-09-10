@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/api/InventarioAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
 
 $pageTitle = 'Inventario';
 $pageEyebrow = 'Inventario / Existencias reales';

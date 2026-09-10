@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/api/NotaInventarioAdministrador.php';
+require_once __DIR__ . '/api/Autenticacion.php';
+Autenticacion::exigirPagina();
 
 $pageTitle = 'Notas de salida';
 $pageEyebrow = 'Inventario / Salidas registradas';
