@@ -17,6 +17,8 @@ final class Autenticacion
     private const INACTIVIDAD_MAXIMA = 3600;
     private const DURACION_MAXIMA = 43200;
     private const REGENERAR_CADA = 900;
+    private const VIGENCIA_SEGUNDO_FACTOR = 300;
+    private const MAX_INTENTOS_SEGUNDO_FACTOR = 5;
     private const HASH_FICTICIO = '$2y$12$fh6mO4nSt1ekMaD/nm3wfOxs281exSld8hpzPPfzCumb33s394ez6';
 
     public static function autenticado(): bool
@@ -89,21 +91,27 @@ final class Autenticacion
         exit;
     }
 
-    public static function iniciarSesion(PDO $conexion, string $identificador, string $password): void
+    /** Devuelve true si la sesión quedó completa y false si requiere el segundo factor. */
+    public static function iniciarSesion(PDO $conexion, string $identificador, string $password): bool
     {
         SesionEmpresa::iniciar();
         $identificador = trim($identificador);
-        if ($identificador === '' || mb_strlen($identificador, 'UTF-8') > 190 || $password === '' || strlen($password) > 4096) {
+        $longitudIdentificador = function_exists('mb_strlen')
+            ? mb_strlen($identificador, 'UTF-8')
+            : strlen($identificador);
+        if ($identificador === '' || $longitudIdentificador > 190 || $password === '' || strlen($password) > 4096) {
             throw new AutenticacionException('Usuario o contraseña incorrectos.');
         }
 
-        $identificadorNormalizado = mb_strtolower($identificador, 'UTF-8');
+        $identificadorNormalizado = function_exists('mb_strtolower')
+            ? mb_strtolower($identificador, 'UTF-8')
+            : strtolower($identificador);
         $identificadorHash = hash('sha256', $identificadorNormalizado);
         $ipHash = hash('sha256', self::ipCliente());
         self::validarLimite($conexion, $identificadorHash, $ipHash);
 
         $consulta = $conexion->prepare(
-            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, `2fa`
              FROM usuarios
              WHERE LOWER(TRIM(COALESCE(email, ''))) = :correo
                 OR LOWER(TRIM(COALESCE(usuario, ''))) = :usuario
@@ -139,23 +147,86 @@ final class Autenticacion
         $hashGuardado = (string) ($usuario['password'] ?? '');
         self::actualizarHashSiNecesario($conexion, (int) $usuario['id'], $password, $hashGuardado);
         self::limpiarIntentos($conexion, $identificadorHash);
-        session_regenerate_id(true);
-        $ahora = time();
-        $nombre = trim(implode(' ', array_filter([
-            trim((string) $usuario['nombre']),
-            trim((string) $usuario['appat']),
-            trim((string) $usuario['apmat']),
-        ])));
-        $_SESSION['auth_usuario_id'] = (int) $usuario['id'];
-        $_SESSION['usuario_id'] = (int) $usuario['id'];
-        $_SESSION['auth_nombre'] = $nombre !== '' ? $nombre : (string) ($usuario['usuario'] ?: $usuario['email']);
-        $_SESSION['auth_tipo'] = trim((string) $usuario['tipo']);
-        $_SESSION['auth_imagen'] = trim((string) $usuario['imagen']);
-        $_SESSION['auth_inicio'] = $ahora;
-        $_SESSION['auth_ultima_actividad'] = $ahora;
-        $_SESSION['auth_regenerada'] = $ahora;
-        $_SESSION['logout_csrf'] = bin2hex(random_bytes(32));
-        self::seleccionarPrimeraEmpresaAsignada($conexion, (int) $usuario['id']);
+        $secretoSegundoFactor = strtoupper(trim((string) ($usuario['2fa'] ?? '')));
+        if ($secretoSegundoFactor !== '') {
+            self::prepararSegundoFactor($usuario, $identificadorHash, $ipHash);
+            return false;
+        }
+
+        self::completarSesion($conexion, $usuario);
+        return true;
+    }
+
+    public static function segundoFactorPendiente(): bool
+    {
+        SesionEmpresa::iniciar();
+        $usuarioId = (int) ($_SESSION['auth_2fa_usuario_id'] ?? 0);
+        $inicio = (int) ($_SESSION['auth_2fa_inicio'] ?? 0);
+        if ($usuarioId <= 0 || $inicio <= 0) {
+            return false;
+        }
+        if ((time() - $inicio) > self::VIGENCIA_SEGUNDO_FACTOR) {
+            self::cancelarSegundoFactor();
+            return false;
+        }
+        return true;
+    }
+
+    public static function verificarSegundoFactor(PDO $conexion, string $codigo): void
+    {
+        if (!self::segundoFactorPendiente()) {
+            throw new AutenticacionException('La verificación expiró. Ingresa nuevamente tu usuario y contraseña.');
+        }
+        $codigo = preg_replace('/\D+/', '', $codigo) ?? '';
+        if (!preg_match('/^\d{6}$/', $codigo)) {
+            throw new AutenticacionException('Ingresa el código de 6 dígitos de tu aplicación autenticadora.');
+        }
+
+        $intentos = (int) ($_SESSION['auth_2fa_intentos'] ?? 0);
+        if ($intentos >= self::MAX_INTENTOS_SEGUNDO_FACTOR) {
+            self::cancelarSegundoFactor();
+            throw new AutenticacionException('Se agotaron los intentos. Ingresa nuevamente tu usuario y contraseña.');
+        }
+
+        $usuarioId = (int) $_SESSION['auth_2fa_usuario_id'];
+        $consulta = $conexion->prepare(
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, `2fa`
+             FROM usuarios WHERE id = :usuario LIMIT 1"
+        );
+        $consulta->execute([':usuario' => $usuarioId]);
+        $usuario = $consulta->fetch(PDO::FETCH_ASSOC);
+        $contador = is_array($usuario)
+            ? self::validarCodigoTotp((string) ($usuario['2fa'] ?? ''), $codigo)
+            : null;
+
+        if (!is_array($usuario) || $contador === null) {
+            $_SESSION['auth_2fa_intentos'] = $intentos + 1;
+            self::registrarFallo(
+                $conexion,
+                (string) ($_SESSION['auth_2fa_identificador_hash'] ?? hash('sha256', '2fa|' . $usuarioId)),
+                (string) ($_SESSION['auth_2fa_ip_hash'] ?? hash('sha256', self::ipCliente()))
+            );
+            $restantes = self::MAX_INTENTOS_SEGUNDO_FACTOR - (int) $_SESSION['auth_2fa_intentos'];
+            if ($restantes <= 0) {
+                self::cancelarSegundoFactor();
+                throw new AutenticacionException('Código incorrecto. Ingresa nuevamente tu usuario y contraseña.');
+            }
+            throw new AutenticacionException('Código incorrecto. Te quedan ' . $restantes . ' intentos.');
+        }
+
+        self::registrarUsoCodigoTotp($conexion, $usuarioId, $contador);
+        self::cancelarSegundoFactor();
+        self::completarSesion($conexion, $usuario);
+    }
+
+    public static function cancelarSegundoFactor(): void
+    {
+        SesionEmpresa::iniciar();
+        foreach (array_keys($_SESSION) as $clave) {
+            if (str_starts_with((string) $clave, 'auth_2fa_')) {
+                unset($_SESSION[$clave]);
+            }
+        }
     }
 
     public static function cerrarSesion(): void
@@ -196,7 +267,9 @@ final class Autenticacion
     public static function accesoRestringidoAEmpresas(): bool
     {
         SesionEmpresa::iniciar();
-        return mb_strtolower(trim((string) ($_SESSION['auth_tipo'] ?? '')), 'UTF-8') === 'cliente';
+        $tipo = trim((string) ($_SESSION['auth_tipo'] ?? ''));
+        $tipo = function_exists('mb_strtolower') ? mb_strtolower($tipo, 'UTF-8') : strtolower($tipo);
+        return $tipo === 'cliente';
     }
 
     public static function puedeUsarEmpresa(PDO $conexion, int $empresaId): bool
@@ -321,6 +394,126 @@ final class Autenticacion
     {
         $consulta = $conexion->prepare('DELETE FROM intentos_login WHERE identificador_hash = :identificador');
         $consulta->execute([':identificador' => $identificadorHash]);
+    }
+
+    /** @param array<string, mixed> $usuario */
+    private static function prepararSegundoFactor(array $usuario, string $identificadorHash, string $ipHash): void
+    {
+        self::limpiarAutenticacion();
+        session_regenerate_id(true);
+        $_SESSION['auth_2fa_usuario_id'] = (int) $usuario['id'];
+        $_SESSION['auth_2fa_inicio'] = time();
+        $_SESSION['auth_2fa_intentos'] = 0;
+        $_SESSION['auth_2fa_identificador_hash'] = $identificadorHash;
+        $_SESSION['auth_2fa_ip_hash'] = $ipHash;
+    }
+
+    /** @param array<string, mixed> $usuario */
+    private static function completarSesion(PDO $conexion, array $usuario): void
+    {
+        self::limpiarAutenticacion();
+        session_regenerate_id(true);
+        $ahora = time();
+        $nombre = trim(implode(' ', array_filter([
+            trim((string) ($usuario['nombre'] ?? '')),
+            trim((string) ($usuario['appat'] ?? '')),
+            trim((string) ($usuario['apmat'] ?? '')),
+        ])));
+        $_SESSION['auth_usuario_id'] = (int) $usuario['id'];
+        $_SESSION['usuario_id'] = (int) $usuario['id'];
+        $_SESSION['auth_nombre'] = $nombre !== ''
+            ? $nombre
+            : (string) (($usuario['usuario'] ?? '') ?: ($usuario['email'] ?? 'Usuario'));
+        $_SESSION['auth_tipo'] = trim((string) ($usuario['tipo'] ?? ''));
+        $_SESSION['auth_imagen'] = trim((string) ($usuario['imagen'] ?? ''));
+        $_SESSION['auth_inicio'] = $ahora;
+        $_SESSION['auth_ultima_actividad'] = $ahora;
+        $_SESSION['auth_regenerada'] = $ahora;
+        $_SESSION['logout_csrf'] = bin2hex(random_bytes(32));
+        self::seleccionarPrimeraEmpresaAsignada($conexion, (int) $usuario['id']);
+    }
+
+    private static function validarCodigoTotp(string $secreto, string $codigo): ?int
+    {
+        $clave = self::decodificarBase32($secreto);
+        if ($clave === null) {
+            return null;
+        }
+        $contadorActual = intdiv(time(), 30);
+        for ($desfase = -1; $desfase <= 1; $desfase++) {
+            $contador = $contadorActual + $desfase;
+            $alto = ($contador >> 32) & 0xFFFFFFFF;
+            $bajo = $contador & 0xFFFFFFFF;
+            $hash = hash_hmac('sha1', pack('N2', $alto, $bajo), $clave, true);
+            $offset = ord($hash[19]) & 0x0F;
+            $binario = ((ord($hash[$offset]) & 0x7F) << 24)
+                | ((ord($hash[$offset + 1]) & 0xFF) << 16)
+                | ((ord($hash[$offset + 2]) & 0xFF) << 8)
+                | (ord($hash[$offset + 3]) & 0xFF);
+            $esperado = str_pad((string) ($binario % 1000000), 6, '0', STR_PAD_LEFT);
+            if (hash_equals($esperado, $codigo)) {
+                return $contador;
+            }
+        }
+        return null;
+    }
+
+    private static function decodificarBase32(string $secreto): ?string
+    {
+        $secreto = strtoupper(preg_replace('/[\s=-]+/', '', trim($secreto)) ?? '');
+        if ($secreto === '' || preg_match('/[^A-Z2-7]/', $secreto)) {
+            return null;
+        }
+        $alfabeto = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $acumulador = 0;
+        $bits = 0;
+        $resultado = '';
+        foreach (str_split($secreto) as $caracter) {
+            $valor = strpos($alfabeto, $caracter);
+            if ($valor === false) {
+                return null;
+            }
+            $acumulador = ($acumulador << 5) | $valor;
+            $bits += 5;
+            if ($bits >= 8) {
+                $bits -= 8;
+                $resultado .= chr(($acumulador >> $bits) & 0xFF);
+                $acumulador &= (1 << $bits) - 1;
+            }
+        }
+        return $resultado !== '' ? $resultado : null;
+    }
+
+    private static function registrarUsoCodigoTotp(PDO $conexion, int $usuarioId, int $contador): void
+    {
+        $transaccionPropia = !$conexion->inTransaction();
+        if ($transaccionPropia) {
+            $conexion->beginTransaction();
+        }
+        try {
+            $consulta = $conexion->prepare(
+                'SELECT ultimo_contador FROM autenticacion_2fa_estado WHERE id_usuario = :usuario FOR UPDATE'
+            );
+            $consulta->execute([':usuario' => $usuarioId]);
+            $ultimo = $consulta->fetchColumn();
+            if ($ultimo !== false && $contador <= (int) $ultimo) {
+                throw new AutenticacionException('Este código ya fue utilizado. Espera el siguiente código de tu aplicación.');
+            }
+            $guardar = $conexion->prepare(
+                'INSERT INTO autenticacion_2fa_estado (id_usuario, ultimo_contador, actualizado_en)
+                 VALUES (:usuario, :contador, NOW())
+                 ON DUPLICATE KEY UPDATE ultimo_contador = VALUES(ultimo_contador), actualizado_en = NOW()'
+            );
+            $guardar->execute([':usuario' => $usuarioId, ':contador' => $contador]);
+            if ($transaccionPropia) {
+                $conexion->commit();
+            }
+        } catch (Throwable $error) {
+            if ($transaccionPropia && $conexion->inTransaction()) {
+                $conexion->rollBack();
+            }
+            throw $error;
+        }
     }
 
     private static function seleccionarPrimeraEmpresaAsignada(PDO $conexion, int $usuarioId): void
