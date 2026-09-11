@@ -81,7 +81,7 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
     <title>Iniciar sesión | ERP Dinámico</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Acceso seguro al sistema de facturación">
-    <link rel="shortcut icon" href="assets/images/logo-sm.png">
+    <link rel="icon" type="image/png" href="assets/images/logo-login-sh.png?v=2">
     <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css">
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css">
     <script src="assets/js/config.min.js"></script>
