@@ -125,7 +125,7 @@ final class FacturaPdfAdministrador
     private function dibujarCabecera(FacturaPdfDocumento $pdf, array $datos): void
     {
         $pdf->bloque(0, 0, self::ANCHO_PAGINA, 4.0, 255, 255, 255);
-        $logo = $this->resolverLogo();
+        $logo = $this->resolverLogo((string) ($datos['emisor_logo'] ?? ''));
         if ($logo !== null) {
             [$anchoOriginal, $altoOriginal] = getimagesize($logo) ?: [1, 1];
             $ratio = max(0.01, $anchoOriginal / max(1, $altoOriginal));
@@ -688,42 +688,68 @@ final class FacturaPdfAdministrador
         return is_file($ruta) ? $ruta : null;
     }
 
-    private function resolverLogo(): ?string
+    private function resolverLogo(string $logoEmpresa = ''): ?string
     {
-        $ruta = str_replace('\\', '/', trim(SesionEmpresa::logoActual()));
+        // El logo de la empresa guardada en la factura tiene prioridad sobre la sesión.
+        $origenes = [$logoEmpresa, SesionEmpresa::logoActual()];
+        $revisados = [];
+        foreach ($origenes as $origen) {
+            $ruta = str_replace('\\', '/', trim((string) $origen));
+            if ($ruta === '' || strtoupper($ruta) === 'NA' || isset($revisados[$ruta])) {
+                continue;
+            }
+            $revisados[$ruta] = true;
 
-        if (filter_var($ruta, FILTER_VALIDATE_URL) !== false && preg_match('#^https?://#i', $ruta) === 1) {
-            $logoRemoto = $this->descargarLogoSesion($ruta);
-            if ($logoRemoto !== null) {
-                return $logoRemoto;
+            if (filter_var($ruta, FILTER_VALIDATE_URL) !== false && preg_match('#^https?://#i', $ruta) === 1) {
+                $logoRemoto = $this->descargarLogoSesion($ruta);
+                if ($logoRemoto !== null) {
+                    return $logoRemoto;
+                }
+                continue;
+            }
+
+            $local = dirname(__DIR__) . DIRECTORY_SEPARATOR
+                . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $ruta), DIRECTORY_SEPARATOR);
+            if (is_file($local) && @getimagesize($local) !== false) {
+                return $local;
+            }
+
+            $url = SesionEmpresa::construirUrlLogo($ruta);
+            if (filter_var($url, FILTER_VALIDATE_URL) !== false) {
+                $logoRemoto = $this->descargarLogoSesion($url);
+                if ($logoRemoto !== null) {
+                    return $logoRemoto;
+                }
             }
         }
 
-        $candidatos = [
-            dirname(__DIR__) . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $ruta), DIRECTORY_SEPARATOR),
-            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . 'logo-sm.png',
-        ];
-        foreach ($candidatos as $candidato) {
-            if (is_file($candidato) && @getimagesize($candidato) !== false) {
-                return $candidato;
-            }
+        $respaldo = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets'
+            . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . 'logo-sm.png';
+        if (is_file($respaldo) && @getimagesize($respaldo) !== false) {
+            return $respaldo;
         }
         return null;
     }
 
     private function descargarLogoSesion(string $url): ?string
     {
-        $contexto = stream_context_create([
-            'http' => [
-                'timeout' => 5,
-                'follow_location' => 1,
-                'max_redirects' => 3,
-                'user_agent' => 'FacturasAVD/1.0',
-            ],
-        ]);
-        $contenido = @file_get_contents($url, false, $contexto, 0, 5 * 1024 * 1024);
+        $this->prepararDirectorio($this->directorioTemporal);
+        $prefijoCache = rtrim($this->directorioTemporal, '/\\')
+            . DIRECTORY_SEPARATOR . 'logo-sesion-' . hash('sha256', $url);
+        $cacheReciente = null;
+        foreach (glob($prefijoCache . '.*') ?: [] as $archivoCache) {
+            if (is_file($archivoCache) && @getimagesize($archivoCache) !== false
+                && (time() - (int) @filemtime($archivoCache)) <= 900) {
+                $cacheReciente = $archivoCache;
+                break;
+            }
+        }
+
+        $separador = str_contains($url, '?') ? '&' : '?';
+        $urlActualizada = $url . $separador . 'pdf_logo_v=' . rawurlencode((string) time());
+        $contenido = $this->descargarContenidoLogo($urlActualizada);
         if ($contenido === false || $contenido === '') {
-            return null;
+            return $cacheReciente;
         }
 
         $informacion = @getimagesizefromstring($contenido);
@@ -737,13 +763,55 @@ final class FacturaPdfAdministrador
             return null;
         }
 
-        $this->prepararDirectorio($this->directorioTemporal);
-        $rutaTemporal = rtrim($this->directorioTemporal, '/\\')
-            . DIRECTORY_SEPARATOR . 'logo-sesion-' . hash('sha256', $url) . '.' . $extension;
-        if (!is_file($rutaTemporal)) {
-            $this->guardarAtomico($rutaTemporal, $contenido);
-        }
+        $rutaTemporal = $prefijoCache . '.' . $extension;
+        // Se sobrescribe para reflejar cambios del archivo aunque conserve la misma URL.
+        $this->guardarAtomico($rutaTemporal, $contenido);
         return $rutaTemporal;
+    }
+
+    private function descargarContenidoLogo(string $url): string|false
+    {
+        $limiteBytes = 5 * 1024 * 1024;
+
+        // En algunos servidores de producción allow_url_fopen está desactivado.
+        // cURL permite obtener el logo sin depender de esa configuración de PHP.
+        if (function_exists('curl_init')) {
+            $curl = curl_init($url);
+            if ($curl !== false) {
+                curl_setopt_array($curl, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_CONNECTTIMEOUT => 5,
+                    CURLOPT_TIMEOUT => 10,
+                    CURLOPT_USERAGENT => 'FacturasAVD/1.0',
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                    CURLOPT_MAXFILESIZE => $limiteBytes,
+                ]);
+                $respuesta = curl_exec($curl);
+                $codigoHttp = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+                curl_close($curl);
+                if (is_string($respuesta) && $respuesta !== '' && strlen($respuesta) <= $limiteBytes
+                    && $codigoHttp >= 200 && $codigoHttp < 300) {
+                    return $respuesta;
+                }
+            }
+        }
+
+        if (!filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOL)) {
+            return false;
+        }
+        $contexto = stream_context_create([
+            'http' => [
+                'timeout' => 10,
+                'follow_location' => 1,
+                'max_redirects' => 3,
+                'user_agent' => 'FacturasAVD/1.0',
+                'ignore_errors' => false,
+            ],
+        ]);
+        return @file_get_contents($url, false, $contexto, 0, $limiteBytes);
     }
 
     private function totalConLetra(float $total, string $moneda): string
