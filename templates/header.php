@@ -2,12 +2,14 @@
     <div class="container-fluid">
         <div class="navbar-header">
             <div class="d-flex align-items-center gap-2">
+                <!-- Buscador general oculto temporalmente; conservar para uso futuro.
                 <form class="app-search d-none d-md-block me-auto" onsubmit="return false;">
                     <div class="position-relative">
                         <input type="search" class="form-control" placeholder="Buscar en el ERP..." autocomplete="off">
                         <i data-lucide="search" class="search-widget-icon"></i>
                     </div>
                 </form>
+                -->
             </div>
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <div class="topbar-item d-none d-sm-block">
