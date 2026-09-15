@@ -12,17 +12,19 @@ if (!isset($sidebarBanks)) {
         $sidebarBanks = [];
     }
 }
+// $sidebarLogo = SesionEmpresa::logoActual(); // Logo dinámico de la empresa; conservar para uso futuro.
+$sidebarLogo = 'assets/images/logo.jpg';
 ?>
 <div class="main-nav">
     <div class="d-flex justify-content-between main-logo-box">
         <div class="logo-box">
             <a href="facturas.php" class="logo-dark">
-                <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-sm erp-company-logo" alt="Logo de la empresa actual">
-                <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-lg erp-company-logo" alt="Logo de la empresa actual">
+                <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="logo-sm erp-company-logo" alt="Logo del sistema">
+                <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="logo-lg erp-company-logo" alt="Logo del sistema">
             </a>
             <a href="facturas.php" class="logo-light">
-                <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-sm erp-company-logo" alt="Logo de la empresa actual">
-                <img src="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>" class="logo-lg erp-company-logo" alt="Logo de la empresa actual">
+                <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="logo-sm erp-company-logo" alt="Logo del sistema">
+                <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="logo-lg erp-company-logo" alt="Logo del sistema">
             </a>
         </div>
         <button type="button" class="btn btn-link d-flex button-sm-hover button-toggle-menu" aria-label="Alternar menu">
