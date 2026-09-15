@@ -108,7 +108,7 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                                 <button class="btn btn-link text-muted p-0 text-decoration-none" type="submit" name="accion" value="cancelar_2fa"><i data-lucide="arrow-left" class="fs-16 me-1"></i>Volver</button>
                             </form>
                         <?php endif; ?>
-                        <img src="assets/images/logo-login-sh.png" class="login-brand mb-3" alt="ERP Dinámico">
+                        <img src="assets/images/logo.jpg" class="login-brand mb-3" alt="ERP Dinámico">
                         <h1 class="h4 fw-bold mb-2"><?= $requiereSegundoFactor ? 'Verificación en dos pasos' : 'Bienvenido de nuevo' ?></h1>
                         <p class="text-muted mb-0"><?= $requiereSegundoFactor ? 'Ingresa el código de 6 dígitos de tu aplicación autenticadora.' : 'Ingresa tus credenciales para continuar.' ?></p>
                     </div>
