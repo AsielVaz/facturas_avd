@@ -643,7 +643,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             const invoiceWasStamped = Boolean(data.factura.uuid);
             const xmlLabel = invoiceWasStamped ? 'Descargar XML timbrado' : 'Descargar XML sin firma';
             const pdfLabel = invoiceWasStamped ? 'Descargar PDF' : 'Descargar PDF de prueba';
-            await Swal.fire({
+            const confirmacionCreacion = await Swal.fire({
                 icon: 'success',
                 title: 'Factura guardada y timbrada',
                 html: '<p class="mb-2">' + escapeHtml(data.mensaje) + '</p>'
@@ -654,6 +654,10 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 confirmButtonText: 'Aceptar',
                 confirmButtonColor: '#16a34a',
             });
+            if (confirmacionCreacion.isConfirmed) {
+                window.location.reload();
+                return;
+            }
             saveInvoiceButton.innerHTML = '<i data-lucide="circle-check" class="fs-17 me-1"></i>Factura guardada';
             validatedPayload = null;
             if (window.lucide) window.lucide.createIcons();
