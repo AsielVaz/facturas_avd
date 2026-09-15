@@ -101,6 +101,20 @@ final class FacturaPendienteAdministrador
             ];
         }
 
+        $tasasIvaGuardadas = array_map(
+            static fn(array $partida): float => (float) ($partida['iva'] ?? 0),
+            $partidas
+        );
+        $ivaModo = $tasasIvaGuardadas !== [] && count(array_filter(
+            $tasasIvaGuardadas,
+            static fn(float $tasa): bool => abs($tasa) > 0.000001
+        )) === 0
+            ? '0'
+            : ($tasasIvaGuardadas !== [] && count(array_filter(
+                $tasasIvaGuardadas,
+                static fn(float $tasa): bool => abs($tasa - 16.0) > 0.000001
+            )) === 0 ? '16' : 'concepto');
+
         $resultado = [
             'id' => (int) $factura['id'],
             'fecha' => (string) $factura['fecha'],
@@ -110,6 +124,7 @@ final class FacturaPendienteAdministrador
             'moneda_id' => (int) $factura['moneda'],
             'forma_pago_id' => (int) $factura['forma_pago'],
             'uso_cfdi' => (string) $factura['uso_clave'],
+            'iva_modo' => $ivaModo,
             'retencion_isr_tasa' => (float) $factura['retencion_isr_tasa'],
             'retencion_iva_tasa' => (float) $factura['retencion_iva_tasa'],
             'exportacion' => '01',

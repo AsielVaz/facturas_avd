@@ -376,6 +376,16 @@ final class FacturacionAdministrador
             $tipoFactura = 'sencilla';
         }
         $facturaCompleta = $tipoFactura === 'completa';
+        // Si un consumidor anterior todavía no envía los interruptores se conserva
+        // el comportamiento previo. El formulario nuevo siempre envía true o false.
+        $incluirRetencionIsr = $facturaCompleta && (
+            !array_key_exists('incluir_retencion_isr', $datos)
+            || filter_var($datos['incluir_retencion_isr'], FILTER_VALIDATE_BOOL)
+        );
+        $incluirRetencionIva = $facturaCompleta && (
+            !array_key_exists('incluir_retencion_iva', $datos)
+            || filter_var($datos['incluir_retencion_iva'], FILTER_VALIDATE_BOOL)
+        );
         $retencionIsrTasa = round((float) ($datos['retencion_isr_tasa'] ?? 0), 6);
         $retencionIvaTasa = round((float) ($datos['retencion_iva_tasa'] ?? 0), 6);
         if (!is_finite($retencionIsrTasa) || $retencionIsrTasa < 0 || $retencionIsrTasa > 100) {
@@ -388,15 +398,30 @@ final class FacturacionAdministrador
         }
         $aplicaReglaReceptor = $perfil !== null;
         $tipoPersonaReceptor = $perfil !== null ? (string) ($perfil['tipo_persona'] ?? '') : '';
+        $ivaModo = strtolower(trim((string) ($datos['iva_modo'] ?? '')));
+        if ($ivaModo === '') {
+            // Compatibilidad con solicitudes creadas antes de existir el selector.
+            $ivaModo = $tipoPersonaReceptor === 'fisica' ? '16' : 'concepto';
+        }
+        if (!in_array($ivaModo, ['concepto', '0', '16'], true)) {
+            $errores[] = 'Selecciona una opción válida para el IVA trasladado.';
+            $ivaModo = 'concepto';
+        }
         if ($aplicaReglaReceptor && $tipoPersonaReceptor === 'moral' && $facturaCompleta) {
-            $retencionIsrTasa = 10.0;
-            $retencionIvaTasa = 10.6667;
-            $advertencias[] = 'Se aplicaron automáticamente las retenciones correspondientes al receptor persona moral.';
+            $retencionIsrTasa = $incluirRetencionIsr ? 10.0 : 0.0;
+            $retencionIvaTasa = $incluirRetencionIva ? 10.6667 : 0.0;
+            if ($incluirRetencionIsr || $incluirRetencionIva) {
+                $advertencias[] = 'Se aplicaron las retenciones seleccionadas para el receptor persona moral.';
+            }
         } elseif ($aplicaReglaReceptor) {
             $retencionIsrTasa = 0.0;
             $retencionIvaTasa = 0.0;
             $advertencias[] = $tipoPersonaReceptor === 'fisica'
-                ? 'Se aplicó automáticamente IVA de 16% sin retenciones para receptor persona física.'
+                ? match ($ivaModo) {
+                    '0' => 'Se aplicará IVA de 0% sin retenciones para el receptor persona física.',
+                    '16' => 'Se aplicará IVA de 16% sin retenciones para el receptor persona física.',
+                    default => 'El IVA se aplicará según la tasa de cada concepto, sin retenciones.',
+                }
                 : 'La factura sencilla se generará sin retenciones.';
         }
         if ($retencionIsrTasa > 0 || $retencionIvaTasa > 0) {
@@ -447,10 +472,11 @@ final class FacturacionAdministrador
             if ($concepto['objeto_impuesto'] === '02' && $base <= 0) {
                 $errores[] = "Partida {$numero}: la base de un concepto sujeto a impuesto debe ser mayor que cero.";
             }
-            $tasaIvaAplicada = (float) $concepto['tasa_iva'];
-            if ($aplicaReglaReceptor && $tipoPersonaReceptor === 'fisica' && $concepto['objeto_impuesto'] === '02') {
-                $tasaIvaAplicada = 16.0;
-            }
+            $tasaIvaAplicada = match ($ivaModo) {
+                '0' => 0.0,
+                '16' => 16.0,
+                default => (float) $concepto['tasa_iva'],
+            };
             $iva = $concepto['objeto_impuesto'] === '02'
                 ? round($base * ($tasaIvaAplicada / 100), 6)
                 : 0.0;
@@ -518,6 +544,7 @@ final class FacturacionAdministrador
                 'metodo_pago' => $metodo['clave'] ?? '',
                 'forma_pago' => $forma['clave'] ?? '',
                 'uso_cfdi' => $usoClave,
+                'iva_modo' => $ivaModo,
                 'subtotal' => $subtotal,
                 'descuento' => $descuentoTotal,
                 'iva' => $ivaTotal,

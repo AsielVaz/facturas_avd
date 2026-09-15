@@ -154,9 +154,34 @@ require 'templates/page-start.php';
                             <div id="paymentFormGroup" class="<?= $facturaCompletaInicial ? 'col-md-6' : 'col-12' ?>"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div id="cfdiUseGroup" class="col-md-7<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-5 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
-                            <div id="vatRateGroup" class="<?= $facturaCompletaInicial ? 'col-md-4' : 'col-12' ?>"><label for="vatRateDisplay" class="form-label">IVA trasladado</label><input id="vatRateDisplay" class="form-control invoice-readonly" value="Selecciona un perfil fiscal" readonly><small id="vatRateHelp" class="text-muted">La tasa se calcula en cada concepto.</small></div>
-                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label><input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para persona moral: 10%.</small></div>
-                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="withholdingVatInput" class="form-label">Retención IVA (%)</label><input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>"><small class="text-muted">Para persona moral: 10.6667%.</small></div>
+                            <div id="vatRateGroup" class="<?= $facturaCompletaInicial ? 'col-md-4' : 'col-12' ?>">
+                                <label for="vatRateSelect" class="form-label">IVA trasladado</label>
+                                <select id="vatRateSelect" class="form-select" disabled>
+                                    <option value="">Selecciona un perfil fiscal</option>
+                                    <option value="concepto">Según concepto (permite combinar)</option>
+                                    <option value="0">IVA 0%</option>
+                                    <option value="16">IVA 16%</option>
+                                </select>
+                                <small id="vatRateHelp" class="text-muted">Selecciona el IVA que debe aplicarse.</small>
+                            </div>
+                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>">
+                                <div class="form-check mb-2">
+                                    <input id="includeWithholdingIsr" class="form-check-input" type="checkbox" <?= $modoEdicion && (float) ($facturaPendiente['retencion_isr_tasa'] ?? 0) > 0 ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="includeWithholdingIsr">Agregar retención ISR al XML</label>
+                                </div>
+                                <label for="withholdingIsrInput" class="form-label">Retención ISR (%)</label>
+                                <input id="withholdingIsrInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_isr_tasa'] ?? 0) : 0)) ?>" <?= !$modoEdicion || (float) ($facturaPendiente['retencion_isr_tasa'] ?? 0) <= 0 ? 'disabled' : '' ?>>
+                                <small class="text-muted">Para persona moral: 10%.</small>
+                            </div>
+                            <div class="col-md-4 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>">
+                                <div class="form-check mb-2">
+                                    <input id="includeWithholdingVat" class="form-check-input" type="checkbox" <?= $modoEdicion && (float) ($facturaPendiente['retencion_iva_tasa'] ?? 0) > 0 ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="includeWithholdingVat">Agregar retención IVA al XML</label>
+                                </div>
+                                <label for="withholdingVatInput" class="form-label">Retención IVA (%)</label>
+                                <input id="withholdingVatInput" type="number" class="form-control" min="0" max="100" step="0.000001" value="<?= htmlspecialchars((string) ($modoEdicion ? ($facturaPendiente['retencion_iva_tasa'] ?? 0) : 0)) ?>" <?= !$modoEdicion || (float) ($facturaPendiente['retencion_iva_tasa'] ?? 0) <= 0 ? 'disabled' : '' ?>>
+                                <small class="text-muted">Para persona moral: 10.6667%.</small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -232,10 +257,12 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const advancedFields = [...document.querySelectorAll('.invoice-advanced-field')];
     const exportSelect = document.getElementById('exportSelect');
     const vatRateGroup = document.getElementById('vatRateGroup');
-    const vatRateDisplay = document.getElementById('vatRateDisplay');
+    const vatRateSelect = document.getElementById('vatRateSelect');
     const vatRateHelp = document.getElementById('vatRateHelp');
     const withholdingIsrInput = document.getElementById('withholdingIsrInput');
     const withholdingVatInput = document.getElementById('withholdingVatInput');
+    const includeWithholdingIsr = document.getElementById('includeWithholdingIsr');
+    const includeWithholdingVat = document.getElementById('includeWithholdingVat');
     const itemsBody = document.getElementById('invoiceItems');
     const emptyItems = document.getElementById('emptyItems');
     const messages = document.getElementById('invoiceMessages');
@@ -248,6 +275,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     let rowSequence = 0;
     let validatedPayload = null;
     let receiverPersonType = '';
+    let restoringEditingRetentions = Boolean(editing);
 
     function money(value) {
         const currency = selectedCode(currencySelect) || 'MXN';
@@ -319,27 +347,35 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     }
 
     function updateVatDisplay() {
-        if (receiverPersonType === 'moral') {
-            vatRateDisplay.value = '0% o 16% según concepto';
-            vatRateHelp.textContent = 'La factura puede combinar conceptos con ambas tasas.';
+        vatRateSelect.disabled = !receiverPersonType;
+        if (!receiverPersonType) {
+            vatRateSelect.value = '';
+            vatRateHelp.textContent = 'Selecciona un perfil fiscal para elegir el IVA.';
             return;
         }
-        if (receiverPersonType === 'fisica') {
-            vatRateDisplay.value = '16%';
-            vatRateHelp.textContent = 'Se aplica 16% a los conceptos gravados.';
-            return;
+        if (vatRateSelect.value === 'concepto') {
+            vatRateHelp.textContent = 'Cada concepto conserva su tasa y pueden combinarse 0% y 16%.';
+        } else {
+            vatRateHelp.textContent = 'Se aplicará ' + vatRateSelect.value + '% a todos los conceptos gravados.';
         }
-        vatRateDisplay.value = 'Selecciona un perfil fiscal';
-        vatRateHelp.textContent = 'El IVA se determinará con la longitud del RFC receptor.';
     }
 
     function resetReceiverTaxRule() {
         receiverPersonType = '';
         invoiceTypeSwitch.disabled = false;
         invoiceTypeHint.textContent = 'Selección manual; el RFC ajusta los impuestos.';
+        vatRateSelect.value = '';
         withholdingIsrInput.value = '0';
         withholdingVatInput.value = '0';
+        includeWithholdingIsr.checked = false;
+        includeWithholdingVat.checked = false;
+        syncWithholdingControls();
         applyInvoiceType();
+    }
+
+    function syncWithholdingControls() {
+        withholdingIsrInput.disabled = !includeWithholdingIsr.checked;
+        withholdingVatInput.disabled = !includeWithholdingVat.checked;
     }
 
     function applyReceiverTaxRule(profile) {
@@ -356,8 +392,27 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         invoiceTypeHint.textContent = moral
             ? 'Persona moral detectada; elige sencilla o completa.'
             : 'Persona física detectada; elige sencilla o completa.';
-        withholdingIsrInput.value = moral ? '10' : '0';
-        withholdingVatInput.value = moral ? '10.6667' : '0';
+        if (restoringEditingRetentions) {
+            vatRateSelect.value = ['concepto', '0', '16'].includes(editing.iva_modo)
+                ? editing.iva_modo
+                : 'concepto';
+        } else {
+            vatRateSelect.value = moral ? 'concepto' : '16';
+        }
+        if (restoringEditingRetentions) {
+            const savedIsrRate = Number(editing.retencion_isr_tasa) || 0;
+            const savedVatRate = Number(editing.retencion_iva_tasa) || 0;
+            withholdingIsrInput.value = String(savedIsrRate);
+            withholdingVatInput.value = String(savedVatRate);
+            includeWithholdingIsr.checked = savedIsrRate > 0;
+            includeWithholdingVat.checked = savedVatRate > 0;
+        } else {
+            withholdingIsrInput.value = moral ? '10' : '0';
+            withholdingVatInput.value = moral ? '10.6667' : '0';
+            includeWithholdingIsr.checked = moral;
+            includeWithholdingVat.checked = moral;
+        }
+        syncWithholdingControls();
         applyInvoiceType();
         [...itemsBody.rows].forEach(row => conceptChanged(row, false));
     }
@@ -485,17 +540,20 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         const discount = Number(row.querySelector('.item-discount').value) || 0;
         const subtotal = quantity * price;
         const base = Math.max(0, subtotal - discount);
-        const taxRate = receiverPersonType === 'fisica' && concept?.objeto_impuesto === '02'
-            ? 16
-            : Number(concept?.tasa_iva) || 0;
+        const selectedVatMode = vatRateSelect.value;
+        const taxRate = concept?.objeto_impuesto !== '02'
+            ? 0
+            : selectedVatMode === '0' || selectedVatMode === '16'
+                ? Number(selectedVatMode)
+                : Number(concept?.tasa_iva) || 0;
         const tax = concept?.objeto_impuesto === '02' ? base * (taxRate / 100) : 0;
         return {concept, quantity, price, discount, subtotal, taxRate, tax, total: base + tax};
     }
 
     function calculate() {
         let subtotal = 0, discount = 0, tax = 0, withholdingIsr = 0, withholdingVat = 0, total = 0;
-        const withholdingIsrRate = isCompleteInvoice() ? Number(withholdingIsrInput.value) || 0 : 0;
-        const withholdingVatRate = isCompleteInvoice() ? Number(withholdingVatInput.value) || 0 : 0;
+        const withholdingIsrRate = isCompleteInvoice() && includeWithholdingIsr.checked ? Number(withholdingIsrInput.value) || 0 : 0;
+        const withholdingVatRate = isCompleteInvoice() && includeWithholdingVat.checked ? Number(withholdingVatInput.value) || 0 : 0;
         [...itemsBody.rows].forEach(row => {
             const values = rowValues(row);
             const taxableBase = values.concept?.objeto_impuesto === '02' ? Math.max(0, values.subtotal - values.discount) : 0;
@@ -534,9 +592,12 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         row.querySelector('.item-price').removeAttribute('max');
         if (concept.unidades_max) row.querySelector('.item-quantity').max = concept.unidades_max;
         else row.querySelector('.item-quantity').removeAttribute('max');
-        const taxRate = receiverPersonType === 'fisica' && concept.objeto_impuesto === '02'
-            ? 16
-            : concept.tasa_iva;
+        const selectedVatMode = vatRateSelect.value;
+        const taxRate = concept.objeto_impuesto !== '02'
+            ? 0
+            : selectedVatMode === '0' || selectedVatMode === '16'
+                ? Number(selectedVatMode)
+                : concept.tasa_iva;
         help.textContent = concept.clave_unidad_medida + ' · ObjetoImp ' + concept.objeto_impuesto + ' · IVA ' + taxRate + '% · Precio sugerido ' + money(concept.precio_min);
         calculate();
     }
@@ -556,8 +617,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             forma_pago_id: Number(paymentFormSelect.value),
             uso_cfdi: useSelect.value,
             exportacion: isCompleteInvoice() ? exportSelect.value : '01',
-            retencion_isr_tasa: isCompleteInvoice() ? Number(withholdingIsrInput.value) || 0 : 0,
-            retencion_iva_tasa: isCompleteInvoice() ? Number(withholdingVatInput.value) || 0 : 0,
+            iva_modo: vatRateSelect.value || 'concepto',
+            incluir_retencion_isr: isCompleteInvoice() && includeWithholdingIsr.checked,
+            incluir_retencion_iva: isCompleteInvoice() && includeWithholdingVat.checked,
+            retencion_isr_tasa: isCompleteInvoice() && includeWithholdingIsr.checked ? Number(withholdingIsrInput.value) || 0 : 0,
+            retencion_iva_tasa: isCompleteInvoice() && includeWithholdingVat.checked ? Number(withholdingVatInput.value) || 0 : 0,
             partidas: [...itemsBody.rows].map(row => ({
                 detalle_id: Number(row.dataset.detailId || 0),
                 concepto_id: Number(row.querySelector('.item-concept').value),
@@ -610,6 +674,18 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     itemsBody.addEventListener('input', calculate);
     withholdingIsrInput.addEventListener('input', calculate);
     withholdingVatInput.addEventListener('input', calculate);
+    vatRateSelect.addEventListener('change', () => {
+        updateVatDisplay();
+        [...itemsBody.rows].forEach(row => conceptChanged(row, false));
+    });
+    includeWithholdingIsr.addEventListener('change', () => {
+        syncWithholdingControls();
+        calculate();
+    });
+    includeWithholdingVat.addEventListener('change', () => {
+        syncWithholdingControls();
+        calculate();
+    });
     invoiceTypeSwitch.addEventListener('change', () => {
         const profile = profiles.get(profileSelect.value);
         if (profile) {
@@ -739,6 +815,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         await loadProfiles();
         profileSelect.value = String(editing.perfil_id || '');
         showProfile();
+        restoringEditingRetentions = false;
         editing.partidas.forEach(partida => addItem(partida));
         if (!editing.partidas.length) addItem();
     } else {
