@@ -20,6 +20,7 @@ $pageDescription = $pageDescription ?? 'Administracion de facturas, bancos e inv
         .erp-kpi-icon svg { width: 22px; height: 22px; }
         .erp-table td, .erp-table th { vertical-align: middle; }
         .erp-table thead th { white-space: nowrap; font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+        .erp-pagination.pagination-sm .page-link { width: auto; min-width: 2rem; padding-inline: .65rem; white-space: nowrap; }
         .erp-avatar { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; font-weight: 700; }
         .erp-account-card { position: relative; overflow: hidden; min-height: 184px; color: #fff; }
         .erp-account-card::after { content: ''; position: absolute; width: 190px; height: 190px; border-radius: 50%; right: -65px; top: -80px; background: rgba(255,255,255,.10); }

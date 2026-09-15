@@ -33,20 +33,30 @@ if (!isset($sidebarBanks)) {
         <ul class="navbar-nav" id="navbar-nav">
             <li class="menu-title">Gestion administrativa</li>
             <li class="menu-item">
-                <a class="menu-link<?= $activeModule === 'facturas' ? ' active' : '' ?>" href="#sidebarFacturas" data-bs-toggle="collapse" role="button" aria-expanded="<?= $activeModule === 'facturas' ? 'true' : 'false' ?>" aria-controls="sidebarFacturas">
-                    <span class="nav-icon"><i data-lucide="receipt-text"></i></span>
-                    <span class="nav-text">Facturas</span>
-                    <span class="menu-arrow"><i data-lucide="chevron-down"></i></span>
+                <a class="menu-link<?= $isActive('facturar') ?>" href="facturar.php">
+                    <span class="nav-icon"><i data-lucide="file-plus-2"></i></span>
+                    <span class="nav-text">Nueva factura</span>
                 </a>
-                <div class="collapse<?= $isOpen('facturas') ?>" id="sidebarFacturas">
-                    <ul class="sub-menu-nav">
-                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturar') ?>" href="facturar.php">Nueva factura</a></li>
-                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas-pendientes') ?>" href="facturas-pendientes.php">Facturas pendientes</a></li>
-                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas') ?>" href="facturas.php">Facturas</a></li>
-                        <li class="sub-menu-item"><a class="sub-menu-link<?= $isActive('facturas-timbradas') ?>" href="facturas-timbradas.php">Facturas detalles</a></li>
-                    </ul>
-                </div>
             </li>
+            <li class="menu-item">
+                <a class="menu-link<?= $isActive('facturas-pendientes') ?>" href="facturas-pendientes.php">
+                    <span class="nav-icon"><i data-lucide="file-clock"></i></span>
+                    <span class="nav-text">Facturas pendientes</span>
+                </a>
+            </li>
+            <li class="menu-item">
+                <a class="menu-link<?= $isActive('facturas') ?>" href="facturas.php">
+                    <span class="nav-icon"><i data-lucide="badge-check"></i></span>
+                    <span class="nav-text">Facturas</span>
+                </a>
+            </li>
+            <li class="menu-item">
+                <a class="menu-link<?= $isActive('facturas-timbradas') ?>" href="facturas-timbradas.php">
+                    <span class="nav-icon"><i data-lucide="file-search-2"></i></span>
+                    <span class="nav-text">Facturas detalles</span>
+                </a>
+            </li>
+            <?php if (false): // Pagos e Inventario ocultos temporalmente; conservar para uso futuro. ?>
             <li class="menu-item">
                 <a class="menu-link<?= $activeModule === 'pagos' ? ' active' : '' ?>" href="#sidebarPagos" data-bs-toggle="collapse" role="button" aria-expanded="<?= $activeModule === 'pagos' ? 'true' : 'false' ?>" aria-controls="sidebarPagos">
                     <span class="nav-icon"><i data-lucide="landmark"></i></span>
@@ -76,6 +86,7 @@ if (!isset($sidebarBanks)) {
                     </ul>
                 </div>
             </li>
+            <?php endif; ?>
         </ul>
     </div>
 </div>

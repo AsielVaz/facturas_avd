@@ -115,8 +115,7 @@ foreach ($cards as $card) {
 <div class="card">
     <div class="card-body border-bottom">
         <div class="row g-2 align-items-center">
-            <div class="col-lg-7"><div class="search-bar"><span><i data-lucide="search"></i></span><input id="companySearch" type="search" class="form-control" placeholder="Buscar empresa, RFC o clave corta..."></div></div>
-            <div class="col-lg-5 text-lg-end"><span class="text-muted fs-13">El acceso se controla con <code>cliente_empresa</code>; la clave fiscal se obtiene comparando los RFC.</span></div>
+            <div class="col-12"><div class="search-bar"><span><i data-lucide="search"></i></span><input id="companySearch" type="search" class="form-control" placeholder="Buscar empresa, RFC o clave corta..."></div></div>
         </div>
     </div>
     <div class="table-responsive">
