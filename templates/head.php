@@ -10,7 +10,7 @@ $pageDescription = $pageDescription ?? 'Administracion de facturas, bancos e inv
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="<?= htmlspecialchars($pageDescription) ?>">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <link rel="shortcut icon" href="<?= htmlspecialchars(SesionEmpresa::logoActual()) ?>">
+    <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg?v=3">
     <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css">
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css">
     <script src="assets/js/config.min.js"></script>
