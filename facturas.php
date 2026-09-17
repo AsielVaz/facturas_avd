@@ -34,4 +34,65 @@ foreach ($cards as $c) { [$kpiLabel,$kpiValue,$kpiTrend,$kpiIcon,$kpiColor,$extr
 ?> -->
 </div>
 <?php $invoiceType='stamped'; require 'templates/invoice-table.php'; ?>
+<div class="modal fade" id="invoicePdfModal" tabindex="-1" aria-labelledby="invoicePdfModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoicePdfModalTitle">Ver factura</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0 position-relative" style="min-height:75vh">
+                <div id="invoicePdfLoader" class="position-absolute top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center bg-body" style="z-index:2" role="status" aria-live="polite">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary mb-3" aria-hidden="true"></div>
+                        <p class="fw-semibold mb-1">Cargando PDF…</p>
+                        <small class="text-muted">Esto puede tardar unos segundos.</small>
+                    </div>
+                </div>
+                <iframe id="invoicePdfFrame" title="Vista previa de la factura en PDF" style="width:100%;height:75vh;border:0;background:#fff"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+<?php
+$pageScripts = <<<'HTML'
+<script>
+(() => {
+    const modalElement = document.getElementById('invoicePdfModal');
+    const modalTitle = document.getElementById('invoicePdfModalTitle');
+    const pdfFrame = document.getElementById('invoicePdfFrame');
+    const pdfLoader = document.getElementById('invoicePdfLoader');
+    if (!modalElement || !modalTitle || !pdfFrame || !pdfLoader) return;
+
+    const showLoader = () => {
+        pdfLoader.classList.remove('d-none');
+        pdfLoader.classList.add('d-flex');
+        pdfFrame.style.visibility = 'hidden';
+    };
+    const hideLoader = () => {
+        pdfLoader.classList.add('d-none');
+        pdfLoader.classList.remove('d-flex');
+        pdfFrame.style.visibility = 'visible';
+    };
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    document.querySelectorAll('.js-view-invoice').forEach(button => {
+        button.addEventListener('click', () => {
+            modalTitle.textContent = 'Factura ' + (button.dataset.invoiceFolio || '');
+            showLoader();
+            pdfFrame.src = button.dataset.pdfUrl || 'about:blank';
+            modal.show();
+        });
+    });
+    pdfFrame.addEventListener('load', () => {
+        if (pdfFrame.getAttribute('src') !== 'about:blank') hideLoader();
+    });
+    modalElement.addEventListener('hidden.bs.modal', () => {
+        pdfFrame.src = 'about:blank';
+        hideLoader();
+    });
+})();
+</script>
+HTML;
+?>
 <?php require 'templates/scripts.php'; ?>

@@ -17,8 +17,9 @@ try {
         dirname(__DIR__) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'pdfs'
     ))->generar($facturaId, SesionEmpresa::empresaActual());
 
+    $disposicion = filter_input(INPUT_GET, 'vista') === '1' ? 'inline' : 'attachment';
     header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="' . $resultado['archivo'] . '"');
+    header('Content-Disposition: ' . $disposicion . '; filename="' . $resultado['archivo'] . '"');
     header('Content-Length: ' . strlen($resultado['contenido']));
     header('Cache-Control: private, no-store');
     header('X-Content-Type-Options: nosniff');

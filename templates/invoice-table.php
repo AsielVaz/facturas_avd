@@ -31,7 +31,15 @@ $buildPageUrl = static function (int $page): string {
                     <td class="fw-semibold"><?= htmlspecialchars($row['total']) ?></td>
                     <td><span class="badge badge-soft-<?= htmlspecialchars($row['color']) ?>"><?= htmlspecialchars($row['status']) ?></span></td>
                     <td class="text-end pe-3">
-                        <?php if ($invoiceType === 'stamped'): ?><a class="btn btn-sm btn-soft-primary" href="api/facturas.php?accion=descargar_xml&amp;tipo=timbrado&amp;id=<?= (int) $row['id'] ?>" title="Descargar XML"><i data-lucide="file-code-2" class="fs-16"></i></a><a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF"><i data-lucide="file-down" class="fs-16"></i></a><?php else: ?><a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar"><i data-lucide="square-pen" class="fs-16"></i></a><a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF de prueba"><i data-lucide="file-down" class="fs-16"></i></a><button class="btn btn-sm btn-soft-success js-stamp-invoice" type="button" data-invoice-id="<?= (int) $row['id'] ?>" title="Timbrar"><i data-lucide="badge-check" class="fs-16"></i></button><?php endif; ?>
+                        <?php if ($invoiceType === 'stamped'): ?>
+                            <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver PDF" aria-label="Ver PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
+                            <a class="btn btn-sm btn-soft-primary" href="api/facturas.php?accion=descargar_xml&amp;tipo=timbrado&amp;id=<?= (int) $row['id'] ?>" title="Descargar XML"><i data-lucide="file-code-2" class="fs-16"></i></a>
+                            <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF"><i data-lucide="file-down" class="fs-16"></i></a>
+                        <?php else: ?>
+                            <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar"><i data-lucide="square-pen" class="fs-16"></i></a>
+                            <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF de prueba"><i data-lucide="file-down" class="fs-16"></i></a>
+                            <button class="btn btn-sm btn-soft-success js-stamp-invoice" type="button" data-invoice-id="<?= (int) $row['id'] ?>" title="Timbrar"><i data-lucide="badge-check" class="fs-16"></i></button>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
