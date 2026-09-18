@@ -76,11 +76,37 @@ final class FacturaPdfAdministrador
 
         $this->prepararDirectorio($this->directorioPdf);
         $identificador = $datos['timbrada'] ? (string) $datos['uuid'] : (string) $facturaId;
-        $archivo = 'factura-' . preg_replace('/[^A-Za-z0-9-]/', '', $identificador) . '.pdf';
+        $archivo = self::nombreBaseArchivo((string) $datos['emisor_nombre'], $identificador) . '.pdf';
         $ruta = rtrim($this->directorioPdf, '/\\') . DIRECTORY_SEPARATOR . $archivo;
         $this->guardarAtomico($ruta, $contenido);
 
         return ['contenido' => $contenido, 'archivo' => $archivo, 'ruta' => $ruta, 'timbrada' => (bool) $datos['timbrada']];
+    }
+
+    public static function nombreBaseArchivo(string $empresa, string $identificador): string
+    {
+        $empresa = strtr(trim($empresa), [
+            'Á' => 'A', 'À' => 'A', 'Ä' => 'A', 'Â' => 'A', 'Ã' => 'A',
+            'É' => 'E', 'È' => 'E', 'Ë' => 'E', 'Ê' => 'E',
+            'Í' => 'I', 'Ì' => 'I', 'Ï' => 'I', 'Î' => 'I',
+            'Ó' => 'O', 'Ò' => 'O', 'Ö' => 'O', 'Ô' => 'O', 'Õ' => 'O',
+            'Ú' => 'U', 'Ù' => 'U', 'Ü' => 'U', 'Û' => 'U', 'Ñ' => 'N',
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u', 'ñ' => 'n',
+        ]);
+        $empresaAscii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $empresa);
+        $empresaAscii = is_string($empresaAscii) ? $empresaAscii : $empresa;
+        $empresaSegura = preg_replace('/[^A-Za-z0-9]+/', '-', $empresaAscii) ?: '';
+        $empresaSegura = trim($empresaSegura, '-');
+        $empresaSegura = $empresaSegura !== '' ? substr($empresaSegura, 0, 80) : 'Empresa';
+
+        $identificadorSeguro = preg_replace('/[^A-Za-z0-9-]/', '', $identificador) ?: '';
+        $identificadorSeguro = $identificadorSeguro !== '' ? $identificadorSeguro : 'documento';
+
+        return $empresaSegura . '-' . $identificadorSeguro;
     }
 
     /** Convierte UTF-8 al juego de caracteres de las fuentes estándar de FPDF. */

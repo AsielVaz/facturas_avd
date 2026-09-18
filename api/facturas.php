@@ -54,7 +54,12 @@ try {
         $facturaId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
         $tipoXml = strtolower(trim((string) ($_GET['tipo'] ?? 'sin_firma')));
         $timbrado = $tipoXml === 'timbrado';
-        $consulta = $conexion->prepare('SELECT uuid, xml_firmado FROM facturas WHERE id = :factura AND razon = :empresa LIMIT 1');
+        $consulta = $conexion->prepare(
+            'SELECT f.uuid, f.xml_firmado, e.razon AS empresa_nombre
+             FROM facturas f
+             INNER JOIN empresas e ON e.id = f.razon
+             WHERE f.id = :factura AND f.razon = :empresa LIMIT 1'
+        );
         $consulta->execute([':factura' => $facturaId, ':empresa' => SesionEmpresa::empresaActual()]);
         $facturaXml = $consulta->fetch(PDO::FETCH_ASSOC);
         $ruta = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . ($timbrado ? 'firmados' : 'sinfirma')
@@ -70,7 +75,27 @@ try {
             throw new RuntimeException('No fue posible leer el XML solicitado.');
         }
         header('Content-Type: application/xml; charset=utf-8');
-        header('Content-Disposition: attachment; filename="XML-factura-' . $facturaId . '.xml"');
+        $empresaNombre = strtr(trim((string) ($facturaXml['empresa_nombre'] ?? 'Empresa')), [
+            'Á' => 'A', 'À' => 'A', 'Ä' => 'A', 'Â' => 'A', 'Ã' => 'A',
+            'É' => 'E', 'È' => 'E', 'Ë' => 'E', 'Ê' => 'E',
+            'Í' => 'I', 'Ì' => 'I', 'Ï' => 'I', 'Î' => 'I',
+            'Ó' => 'O', 'Ò' => 'O', 'Ö' => 'O', 'Ô' => 'O', 'Õ' => 'O',
+            'Ú' => 'U', 'Ù' => 'U', 'Ü' => 'U', 'Û' => 'U', 'Ñ' => 'N',
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u', 'ñ' => 'n',
+        ]);
+        $empresaAscii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $empresaNombre);
+        $empresaAscii = is_string($empresaAscii) ? $empresaAscii : $empresaNombre;
+        $empresaSegura = trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $empresaAscii), '-');
+        $identificador = $timbrado && trim((string) ($facturaXml['uuid'] ?? '')) !== ''
+            ? trim((string) $facturaXml['uuid'])
+            : (string) $facturaId;
+        $identificador = preg_replace('/[^A-Za-z0-9-]/', '', $identificador) ?: (string) $facturaId;
+        $archivoDescarga = ($empresaSegura !== '' ? substr($empresaSegura, 0, 80) : 'Empresa') . '-' . $identificador . '.xml';
+        header('Content-Disposition: attachment; filename="' . $archivoDescarga . '"');
         header('Content-Length: ' . strlen($contenidoXml));
         echo $contenidoXml;
         exit;

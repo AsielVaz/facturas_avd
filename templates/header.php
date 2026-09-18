@@ -13,8 +13,8 @@
             </div>
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <div class="topbar-item d-none d-sm-block">
-                    <a href="empresas-s.php" class="btn btn-sm btn-soft-primary" title="Cambiar empresa actual">
-                        <i data-lucide="building-2" class="fs-16 me-1"></i>Empresa <?= SesionEmpresa::empresaActual() ?>
+                    <a href="empresas-s.php" class="btn btn-sm btn-soft-primary text-nowrap" title="Cambiar empresa actual">
+                        <i data-lucide="building-2" class="fs-16 me-1"></i><?= htmlspecialchars(SesionEmpresa::nombreActual()) ?>
                     </a>
                 </div>
                 <div class="topbar-item">

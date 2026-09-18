@@ -202,7 +202,7 @@ final class FacturacionAdministrador
     {
         $metodos = $this->conexion->query(
             "SELECT id, UPPER(TRIM(clave)) AS clave, TRIM(metodo_pago) AS descripcion
-             FROM metodos_pago WHERE clave IN ('PUE', 'PPD') ORDER BY id"
+             FROM metodos_pago WHERE UPPER(TRIM(clave)) = 'PUE' ORDER BY id"
         )->fetchAll();
         $monedas = $this->conexion->query(
             "SELECT id, UPPER(TRIM(clave_moneda)) AS clave, TRIM(moneda) AS descripcion
@@ -281,7 +281,7 @@ final class FacturacionAdministrador
 
         $catalogos = $this->obtenerCatalogos();
         $moneda = $this->buscarCatalogoPorId($catalogos['monedas'], (int) ($datos['moneda_id'] ?? 0));
-        $metodo = $this->buscarCatalogoPorId($catalogos['metodos_pago'], (int) ($datos['metodo_pago_id'] ?? 0));
+        $metodo = $catalogos['metodos_pago'][0] ?? null;
         $forma = $this->buscarCatalogoPorId($catalogos['formas_pago'], (int) ($datos['forma_pago_id'] ?? 0));
         if ($moneda === null) {
             $errores[] = 'Selecciona una moneda válida.';
@@ -337,14 +337,8 @@ final class FacturacionAdministrador
             $advertencias[] = 'Una operación de exportación puede requerir información y complementos que este preparador no captura todavía.';
         }
 
-        $fecha = trim((string) ($datos['fecha'] ?? ''));
-        if ($fecha === '') {
-            $fecha = (new DateTimeImmutable('today'))->format('Y-m-d');
-        }
-        $fechaValida = DateTimeImmutable::createFromFormat('!Y-m-d', $fecha);
-        if (!$fechaValida || $fechaValida->format('Y-m-d') !== $fecha) {
-            $errores[] = 'Selecciona una fecha válida para el comprobante.';
-        }
+        // La fecha fiscal siempre se determina en el servidor; no se acepta una fecha manipulada por el cliente.
+        $fechaValida = new DateTimeImmutable('today');
 
         $partidasEntrada = is_array($datos['partidas'] ?? null) ? $datos['partidas'] : [];
         if ($partidasEntrada === []) {
@@ -535,13 +529,14 @@ final class FacturacionAdministrador
             'comprobante' => [
                 'version' => '4.0',
                 'tipo_factura' => $tipoFactura,
-                'fecha' => ($fechaValida ?: new DateTimeImmutable('today'))->format('Y-m-d') . 'T' . (new DateTimeImmutable('now'))->format('H:i:s'),
+                'fecha' => $fechaValida->format('Y-m-d') . 'T' . (new DateTimeImmutable('now'))->format('H:i:s'),
                 'tipo_comprobante' => 'I',
                 'exportacion' => $exportacion,
                 'lugar_expedicion' => $emisor['cp'],
                 'moneda' => $moneda['clave'] ?? '',
                 'tipo_cambio' => round($tipoCambio, 6),
                 'metodo_pago' => $metodo['clave'] ?? '',
+                'metodo_pago_id' => (int) ($metodo['id'] ?? 0),
                 'forma_pago' => $forma['clave'] ?? '',
                 'uso_cfdi' => $usoClave,
                 'iva_modo' => $ivaModo,

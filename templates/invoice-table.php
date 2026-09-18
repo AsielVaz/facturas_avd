@@ -33,8 +33,7 @@ $buildPageUrl = static function (int $page): string {
                     <td class="text-end pe-3">
                         <?php if ($invoiceType === 'stamped'): ?>
                             <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver PDF" aria-label="Ver PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
-                            <a class="btn btn-sm btn-soft-primary" href="api/facturas.php?accion=descargar_xml&amp;tipo=timbrado&amp;id=<?= (int) $row['id'] ?>" title="Descargar XML"><i data-lucide="file-code-2" class="fs-16"></i></a>
-                            <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF"><i data-lucide="file-down" class="fs-16"></i></a>
+                            <a class="btn btn-sm btn-soft-primary" href="api/factura-documentos.php?id=<?= (int) $row['id'] ?>" title="Descargar documentos (XML y PDF)" aria-label="Descargar XML y PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="folder-down" class="fs-16"></i></a>
                         <?php else: ?>
                             <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar"><i data-lucide="square-pen" class="fs-16"></i></a>
                             <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF de prueba"><i data-lucide="file-down" class="fs-16"></i></a>

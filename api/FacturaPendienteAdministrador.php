@@ -237,7 +237,7 @@ final class FacturaPendienteAdministrador
             );
             $actualizar->bindValue(':fecha', $fecha, PDO::PARAM_STR);
             $actualizar->bindValue(':cliente', (int) $datos['cliente_id'], PDO::PARAM_INT);
-            $actualizar->bindValue(':metodo', (int) $datos['metodo_pago_id'], PDO::PARAM_INT);
+            $actualizar->bindValue(':metodo', (int) $resultado['comprobante']['metodo_pago_id'], PDO::PARAM_INT);
             $actualizar->bindValue(':moneda', (int) $datos['moneda_id'], PDO::PARAM_INT);
             $actualizar->bindValue(':forma', (string) ((int) $datos['forma_pago_id']), PDO::PARAM_STR);
             $actualizar->bindValue(':status_pago', $metodoClave === 'PUE' ? 'Pagado' : 'No Pagado', PDO::PARAM_STR);

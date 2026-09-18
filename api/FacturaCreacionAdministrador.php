@@ -115,7 +115,7 @@ final class FacturaCreacionAdministrador
         );
         $consulta->bindValue(':fecha', substr((string) $comprobante['fecha'], 0, 10), PDO::PARAM_STR);
         $consulta->bindValue(':cliente', (int) $receptor['cliente_id'], PDO::PARAM_INT);
-        $consulta->bindValue(':metodo', (int) $datos['metodo_pago_id'], PDO::PARAM_INT);
+        $consulta->bindValue(':metodo', (int) $comprobante['metodo_pago_id'], PDO::PARAM_INT);
         $consulta->bindValue(':moneda', (int) $datos['moneda_id'], PDO::PARAM_INT);
         $consulta->bindValue(':forma', (string) ((int) $datos['forma_pago_id']), PDO::PARAM_STR);
         $consulta->bindValue(':status_pago', $comprobante['metodo_pago'] === 'PUE' ? 'Pagado' : 'No Pagado', PDO::PARAM_STR);
