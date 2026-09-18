@@ -64,7 +64,7 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
     . ($facturaCompletaInicial ? 'Factura avanzada' : 'Factura sencilla') . '</label></div>'
     . '<small id="invoiceTypeHint" class="d-block text-muted">Selección manual; el RFC ajusta los impuestos.</small></div></div>'
-    . '<a href="facturas-pendientes.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a pendientes</a></div>';
+    . '<a href="facturas.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a inicio</a></div>';
 require 'templates/page-start.php';
 ?>
 
