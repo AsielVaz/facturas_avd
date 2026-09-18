@@ -13,14 +13,37 @@ $buildPageUrl = static function (int $page): string {
 <div class="card">
     <div class="card-body border-bottom">
         <form method="get" class="row g-2 align-items-center">
-            <div class="col-lg-6"><div class="search-bar"><span><i data-lucide="search"></i></span><input name="buscar" value="<?= htmlspecialchars($invoiceSearch) ?>" type="search" class="form-control" placeholder="Buscar folio, cliente o RFC..."></div></div>
-            <div class="col-sm-5 col-lg-3"><input name="fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="date" class="form-control" aria-label="Filtrar por fecha"></div>
-            <div class="col-sm-7 col-lg-3 text-sm-end"><button class="btn btn-primary" type="submit"><i data-lucide="search" class="fs-16 me-1"></i>Buscar</button><?php if ($invoiceSearch !== '' || $invoiceDate !== ''): ?><a href="?" class="btn btn-soft-secondary ms-1">Limpiar</a><?php endif; ?></div>
+            <div class="col-lg-6">
+                <div class="search-bar">
+                    <span><i data-lucide="search"></i></span>
+                    <input name="buscar" value="<?= htmlspecialchars($invoiceSearch) ?>" type="search" class="form-control" placeholder="Buscar folio, cliente o RFC...">
+                </div>
+            </div>
+            <!-- Input de fecha adaptado con formato visual amigable -->
+            <div class="col-sm-5 col-lg-3">
+                <input name="fecha" id="filtro-fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="text" class="form-control" placeholder="18-sep-2026" aria-label="Filtrar por fecha">
+            </div>
+            <div class="col-sm-7 col-lg-3 text-sm-end">
+                <button class="btn btn-primary" type="submit"><i data-lucide="search" class="fs-16 me-1"></i>Buscar</button>
+                <?php if ($invoiceSearch !== '' || $invoiceDate !== ''): ?>
+                    <a href="?" class="btn btn-soft-secondary ms-1">Limpiar</a>
+                <?php endif; ?>
+            </div>
         </form>
     </div>
     <div class="table-responsive">
         <table class="table table-hover text-nowrap mb-0 erp-table">
-            <thead><tr><th class="ps-3">Folio</th><th>Cliente</th><th>Fecha</th><th><?= $invoiceType === 'stamped' ? 'UUID / Timbrado' : 'Vencimiento' ?></th><th>Total</th><th>Estado</th><th class="text-end pe-3">Acciones</th></tr></thead>
+            <thead>
+                <tr>
+                    <th class="ps-3">Folio</th>
+                    <th>Cliente</th>
+                    <th>Fecha</th>
+                    <th><?= $invoiceType === 'stamped' ? 'UUID / Timbrado' : 'Vencimiento' ?></th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th class="text-end pe-3">Acciones</th>
+                </tr>
+            </thead>
             <tbody>
             <?php foreach ($invoiceRows as $row): ?>
                 <tr>
@@ -51,3 +74,18 @@ $buildPageUrl = static function (int $page): string {
         <nav aria-label="Paginación de facturas"><ul class="pagination pagination-sm erp-pagination mb-0"><li class="page-item<?= $invoicePagination['pagina'] <= 1 ? ' disabled' : '' ?>"><a class="page-link" href="<?= htmlspecialchars($buildPageUrl(max(1, $invoicePagination['pagina'] - 1))) ?>">Anterior</a></li><li class="page-item active"><span class="page-link"><?= (int) $invoicePagination['pagina'] ?> / <?= (int) $invoicePagination['paginas'] ?></span></li><li class="page-item<?= $invoicePagination['pagina'] >= $invoicePagination['paginas'] ? ' disabled' : '' ?>"><a class="page-link" href="<?= htmlspecialchars($buildPageUrl(min($invoicePagination['paginas'], $invoicePagination['pagina'] + 1))) ?>">Siguiente</a></li></ul></nav>
     </div>
 </div>
+
+<!-- Script para inicializar Flatpickr con el formato deseado -->
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof flatpickr !== "undefined") {
+            flatpickr("#filtro-fecha", {
+                dateFormat: "Y-m-d",      // Formato que se envía por GET al servidor (ej. 2026-09-18)
+                altInput: true,           // Habilita un input visual alternativo
+                altFormat: "d-M-Y",       // Formato visual que verá el usuario (ej. 18-sep-2026)
+                locale: "es",             // Idioma español para los meses
+                allowInput: true
+            });
+        }
+    });
+</script>
