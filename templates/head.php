@@ -3,7 +3,7 @@ $pageTitle = $pageTitle ?? 'ERP Dinamico';
 $pageDescription = $pageDescription ?? 'Administracion de facturas, bancos e inventario.';
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="sidebar-hidden">
 <head>
     <meta charset="utf-8">
     <title><?= htmlspecialchars($pageTitle) ?> | ERP Dinamico</title>

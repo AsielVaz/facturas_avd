@@ -27,6 +27,7 @@ $sidebarLogo = 'assets/images/logo.jpg';
                         <i data-lucide="sun" class="dark-mode"></i>
                     </button>
                 </div>
+                <?php /* Notificaciones reservadas para una futura implementacion.
                 <div class="dropdown topbar-item">
                     <button type="button" class="topbar-button" data-bs-toggle="dropdown" aria-expanded="false"
                         aria-label="Notificaciones">
@@ -49,6 +50,7 @@ $sidebarLogo = 'assets/images/logo.jpg';
                         </div>
                     </div>
                 </div>
+                */ ?>
                 <div class="dropdown topbar-item">
                     <a class="topbar-button p-0" href="#" data-bs-toggle="dropdown" aria-expanded="false">
                         <span class="d-flex align-items-center gap-2">
