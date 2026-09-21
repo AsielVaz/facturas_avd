@@ -7,6 +7,7 @@ $pageAction = '<a class="btn btn-primary" href="facturar.php"><i data-lucide="pl
 require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
 require_once __DIR__ . '/api/Autenticacion.php';
 Autenticacion::exigirPagina();
+$_SESSION['sat_status_csrf'] ??= bin2hex(random_bytes(32));
 $invoiceError = '';
 try {
     $invoiceData = (new FacturaVistaAdministrador(new FacturaAdministrador(Conexion::obtener())))->cargar('timbradas', $_GET);
@@ -34,6 +35,12 @@ foreach ($cards as $c) { [$kpiLabel,$kpiValue,$kpiTrend,$kpiIcon,$kpiColor,$extr
 ?> -->
 </div>
 <?php $invoiceType='stamped'; require 'templates/invoice-table.php'; ?>
+<script>
+window.satStatusConfig = <?= json_encode([
+    'endpoint' => 'api/factura-estados-sat.php',
+    'csrf' => (string) $_SESSION['sat_status_csrf'],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+</script>
 <div class="modal fade" id="invoicePdfModal" tabindex="-1" aria-labelledby="invoicePdfModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
@@ -91,6 +98,61 @@ $pageScripts = <<<'HTML'
         pdfFrame.src = 'about:blank';
         hideLoader();
     });
+})();
+
+(() => {
+    const config = window.satStatusConfig;
+    const badges = [...document.querySelectorAll('.js-invoice-status[data-invoice-id]')];
+    if (!config || badges.length === 0) return;
+
+    const invoiceIds = [...new Set(badges.map(badge => Number(badge.dataset.invoiceId)).filter(Number.isInteger))];
+    badges.forEach(badge => {
+        badge.dataset.localStatus = badge.textContent.trim();
+        badge.textContent = 'Consultando SAT…';
+        badge.className = 'badge badge-soft-secondary js-invoice-status';
+    });
+
+    fetch(config.endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({csrf: config.csrf, facturas: invoiceIds}),
+    })
+        .then(async response => {
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'No fue posible consultar el SAT.');
+            return data;
+        })
+        .then(data => {
+            badges.forEach(badge => {
+                const result = data.estados?.[badge.dataset.invoiceId];
+                if (!result || !result.comprobado) {
+                    badge.textContent = badge.dataset.localStatus || 'Sin comprobar';
+                    badge.className = 'badge badge-soft-warning js-invoice-status';
+                    badge.title = result?.error || 'No fue posible comprobar esta factura en el SAT.';
+                    return;
+                }
+                const state = String(result.estado || 'Comprobada');
+                const normalized = state.toLocaleLowerCase('es-MX');
+                const color = result.cancelada ? 'danger' : (normalized.includes('vigente') ? 'success' : 'warning');
+                badge.textContent = state;
+                badge.className = 'badge badge-soft-' + color + ' js-invoice-status';
+                badge.title = [
+                    result.codigo_estatus,
+                    result.es_cancelable ? 'Cancelación: ' + result.es_cancelable : '',
+                    result.estatus_cancelacion ? 'Estatus de cancelación: ' + result.estatus_cancelacion : '',
+                    result.validacion_efos ? 'EFOS: ' + result.validacion_efos : '',
+                    result.desde_sesion ? 'Resultado guardado en la sesión.' : 'Consultado en el SAT.',
+                ].filter(Boolean).join('\n');
+            });
+        })
+        .catch(error => {
+            badges.forEach(badge => {
+                badge.textContent = badge.dataset.localStatus || 'Sin comprobar';
+                badge.className = 'badge badge-soft-warning js-invoice-status';
+                badge.title = error.message;
+            });
+        });
 })();
 </script>
 HTML;

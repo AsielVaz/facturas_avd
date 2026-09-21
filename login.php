@@ -75,7 +75,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="utf-8">
     <title>Iniciar sesión | ERP Dinámico</title>
@@ -86,76 +86,215 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css">
     <script src="assets/js/config.min.js"></script>
     <style>
-        .login-shell { min-height: 100vh; background: radial-gradient(circle at top right, rgba(var(--bs-primary-rgb), .12), transparent 38%); }
-        .login-card { max-width: 480px; width: 100%; }
-        .login-brand { width: min(270px, 78%); height: 108px; object-fit: contain; filter: drop-shadow(0 10px 20px rgba(0,0,0,.14)); }
-        .login-card .card-body { position: relative; overflow: hidden; }
-        .login-card .card-body::before { content: ''; position: absolute; width: 180px; height: 180px; right: -90px; top: -95px; border-radius: 50%; background: rgba(var(--bs-primary-rgb), .08); pointer-events: none; }
-        .otp-input { min-height: 62px; text-align: center; font-size: 1.65rem; font-weight: 700; letter-spacing: .55rem; padding-left: calc(.55rem + .75rem); font-variant-numeric: tabular-nums; }
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #191c1f; color: #f3eee9; }
+        .login-shell {
+            position: relative;
+            isolation: isolate;
+            min-height: 100vh;
+            overflow: hidden;
+            background: #191c1f;
+        }
+        .login-shell::before,
+        .login-shell::after {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(22px);
+        }
+        .login-shell::before {
+            width: min(780px, 65vw);
+            height: min(780px, 76vw);
+            left: -230px;
+            top: 70px;
+            background: radial-gradient(circle, rgba(126, 48, 4, .82) 0%, rgba(91, 34, 3, .48) 38%, transparent 72%);
+        }
+        .login-shell::after {
+            width: min(560px, 52vw);
+            height: min(560px, 52vw);
+            right: -120px;
+            bottom: -210px;
+            background: radial-gradient(circle, rgba(112, 72, 24, .42) 0%, rgba(75, 50, 22, .2) 42%, transparent 72%);
+        }
+        .login-card { width: min(420px, calc(100vw - 32px)); }
+        .login-panel {
+            background: linear-gradient(145deg, rgba(48, 29, 20, .95), rgba(37, 28, 24, .94));
+            border: 1px solid rgba(255, 138, 42, .04);
+            border-radius: 24px;
+            box-shadow: 0 28px 62px rgba(0, 0, 0, .42), 0 0 42px rgba(227, 91, 0, .05);
+        }
+        .login-panel .card-body { padding: 42px 40px 32px; }
+        .login-brand-wrap { text-align: center; margin-bottom: 32px; }
+        .login-brand {
+            display: inline-block;
+            width: 145px;
+            height: 64px;
+            object-fit: contain;
+            filter: drop-shadow(0 7px 15px rgba(232, 100, 20, .18));
+        }
+        .login-heading { color: #f4eee8; font-size: 1.2rem; letter-spacing: -.02em; }
+        .login-subtitle { color: #8d7c72; font-size: .84rem; }
+        .login-label {
+            color: #9c8b81;
+            font-size: .75rem;
+            font-weight: 700;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+        }
+        .login-control { position: relative; }
+        .login-control > svg {
+            position: absolute;
+            z-index: 3;
+            left: 14px;
+            top: 50%;
+            width: 17px;
+            height: 17px;
+            color: #817a80;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        .login-control .form-control {
+            min-height: 48px;
+            padding: .7rem 46px .7rem 42px;
+            color: #f7f2ee;
+            background: #3a373f;
+            border: 1px solid transparent;
+            border-radius: 13px !important;
+            box-shadow: none;
+        }
+        .login-control .form-control::placeholder { color: #746e73; }
+        .login-control .form-control:focus {
+            background: #3d3941;
+            border-color: #d66a0b;
+            box-shadow: 0 0 0 3px rgba(214, 106, 11, .15), 0 0 22px rgba(214, 86, 0, .09);
+        }
+        .password-toggle {
+            position: absolute;
+            z-index: 4;
+            top: 50%;
+            right: 7px;
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            color: #938c91;
+            background: transparent;
+            border: 0;
+            border-radius: 9px;
+            transform: translateY(-50%);
+        }
+        .password-toggle:hover,
+        .password-toggle:focus { color: #f08a27; background: rgba(255, 255, 255, .04); }
+        .login-submit {
+            min-height: 48px;
+            color: #fff;
+            font-weight: 700;
+            background: linear-gradient(90deg, #cb4c00, #dc7900);
+            border: 0;
+            border-radius: 13px;
+            box-shadow: 0 9px 22px rgba(207, 82, 0, .24);
+        }
+        .login-submit:hover,
+        .login-submit:focus {
+            color: #fff;
+            background: linear-gradient(90deg, #dc5700, #ed8b08);
+            box-shadow: 0 11px 26px rgba(224, 91, 0, .32);
+        }
+        .login-back { color: #9c8b81; font-size: .82rem; }
+        .login-back:hover { color: #e98729; }
+        .login-footer { color: #64564f; font-size: .72rem; }
+        .login-panel .alert { color: #f5e9e2; background: rgba(113, 42, 30, .42); border-color: rgba(238, 91, 55, .3); }
+        .login-panel .alert-success { background: rgba(25, 94, 57, .4); border-color: rgba(41, 190, 104, .25); }
+        .otp-input {
+            min-height: 54px !important;
+            padding-left: 42px !important;
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: .52rem;
+            font-variant-numeric: tabular-nums;
+            border-color: #a34b00 !important;
+            background: rgba(53, 31, 22, .78) !important;
+        }
+        @media (max-width: 575.98px) {
+            .login-panel .card-body { padding: 34px 24px 26px; }
+            .login-brand-wrap { margin-bottom: 26px; }
+        }
     </style>
 </head>
 <body>
-<main class="login-shell d-flex align-items-center py-5">
-    <div class="container">
-        <div class="login-card mx-auto">
-            <div class="card border-0 shadow-lg">
-                <div class="card-body p-4 p-sm-5">
-                    <div class="text-center mb-4">
-                        <?php if ($requiereSegundoFactor): ?>
-                            <form method="post" class="text-start mb-2">
-                                <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
-                                <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
-                                <button class="btn btn-link text-muted p-0 text-decoration-none" type="submit" name="accion" value="cancelar_2fa"><i data-lucide="arrow-left" class="fs-16 me-1"></i>Volver</button>
-                            </form>
-                        <?php endif; ?>
-                        <img src="assets/images/logo.jpg" class="login-brand mb-3" alt="ERP Dinámico">
-                        <h1 class="h4 fw-bold mb-2"><?= $requiereSegundoFactor ? 'Verificación en dos pasos' : 'Bienvenido de nuevo' ?></h1>
-                        <p class="text-muted mb-0"><?= $requiereSegundoFactor ? 'Ingresa el código de 6 dígitos de tu aplicación autenticadora.' : 'Ingresa tus credenciales para continuar.' ?></p>
-                    </div>
-
-                    <?php if ($errorLogin !== ''): ?>
-                        <div class="alert alert-danger" role="alert"><i data-lucide="circle-alert" class="fs-17 me-1"></i><?= htmlspecialchars($errorLogin) ?></div>
-                    <?php elseif (($_GET['logout'] ?? '') === '1'): ?>
-                        <div class="alert alert-success" role="status"><i data-lucide="circle-check" class="fs-17 me-1"></i>La sesión se cerró correctamente.</div>
-                    <?php endif; ?>
-
-                    <?php if ($requiereSegundoFactor): ?>
-                        <form method="post" autocomplete="off">
-                            <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
-                            <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
-                            <div class="mb-4">
-                                <label for="codigo_2fa" class="form-label">Código de verificación</label>
-                                <input id="codigo_2fa" name="codigo_2fa" type="text" class="form-control otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" aria-describedby="ayudaCodigo" required autofocus>
-                                <div id="ayudaCodigo" class="form-text mt-2">El código cambia cada 30 segundos.</div>
-                            </div>
-                            <div class="d-grid gap-2">
-                                <button class="btn btn-primary btn-lg" type="submit" name="accion" value="verificar_2fa"><i data-lucide="shield-check" class="fs-18 me-1"></i>Verificar y entrar</button>
-                            </div>
-                        </form>
-                    <?php else: ?>
-                        <form method="post" autocomplete="on">
-                            <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
-                            <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
-                            <input type="hidden" name="accion" value="credenciales">
-                            <div class="mb-3">
-                                <label for="identificador" class="form-label">Usuario o correo</label>
-                                <input id="identificador" name="identificador" type="text" class="form-control form-control-lg" maxlength="190" autocomplete="username" value="<?= htmlspecialchars($identificador) ?>" required autofocus>
-                            </div>
-                            <div class="mb-4">
-                                <label for="password" class="form-label">Contraseña</label>
-                                <div class="input-group input-group-lg">
-                                    <input id="password" name="password" type="password" class="form-control" maxlength="4096" autocomplete="current-password" required>
-                                    <button id="togglePassword" class="btn btn-outline-secondary" type="button" aria-label="Mostrar contraseña"><i data-lucide="eye" class="fs-18"></i></button>
-                                </div>
-                            </div>
-                            <div class="d-grid">
-                                <button class="btn btn-primary btn-lg" type="submit">Continuar<i data-lucide="arrow-right" class="fs-18 ms-2"></i></button>
-                            </div>
-                        </form>
-                    <?php endif; ?>
+<main class="login-shell d-flex align-items-center justify-content-center py-4">
+    <div class="login-card">
+        <div class="card login-panel border-0">
+            <div class="card-body">
+                <div class="login-brand-wrap">
+                    <img src="assets/images/logo-login-sh.png" class="login-brand" alt="Sistema 14">
                 </div>
+
+                <?php if ($requiereSegundoFactor): ?>
+                    <form method="post" class="mb-4">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
+                        <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
+                        <button class="btn btn-link login-back p-0 text-decoration-none" type="submit" name="accion" value="cancelar_2fa"><i data-lucide="arrow-left" class="fs-15 me-1"></i>Volver</button>
+                    </form>
+                <?php endif; ?>
+
+                <div class="mb-4">
+                    <h1 class="login-heading fw-bold mb-2"><?= $requiereSegundoFactor ? 'Verificación en dos pasos' : 'Bienvenido de nuevo' ?></h1>
+                    <p class="login-subtitle mb-0"><?= $requiereSegundoFactor ? 'Ingresa el código de 6 dígitos de tu app.' : 'Ingresa tus credenciales para continuar.' ?></p>
+                </div>
+
+                <?php if ($errorLogin !== ''): ?>
+                    <div class="alert alert-danger py-2 small" role="alert"><i data-lucide="circle-alert" class="fs-16 me-1"></i><?= htmlspecialchars($errorLogin) ?></div>
+                <?php elseif (($_GET['logout'] ?? '') === '1'): ?>
+                    <div class="alert alert-success py-2 small" role="status"><i data-lucide="circle-check" class="fs-16 me-1"></i>La sesión se cerró correctamente.</div>
+                <?php endif; ?>
+
+                <?php if ($requiereSegundoFactor): ?>
+                    <form method="post" autocomplete="off">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
+                        <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
+                        <div class="mb-4">
+                            <label for="codigo_2fa" class="form-label login-label">Código 2FA</label>
+                            <div class="login-control">
+                                <i data-lucide="shield"></i>
+                                <input id="codigo_2fa" name="codigo_2fa" type="text" class="form-control otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required autofocus>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button class="btn login-submit" type="submit" name="accion" value="verificar_2fa">Verificar y entrar</button>
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <form method="post" autocomplete="on">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
+                        <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
+                        <input type="hidden" name="accion" value="credenciales">
+                        <div class="mb-3">
+                            <label for="identificador" class="form-label login-label">Correo electrónico o usuario</label>
+                            <div class="login-control">
+                                <i data-lucide="mail"></i>
+                                <input id="identificador" name="identificador" type="text" class="form-control" maxlength="190" autocomplete="username" value="<?= htmlspecialchars($identificador) ?>" required autofocus>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="password" class="form-label login-label">Contraseña</label>
+                            <div class="login-control">
+                                <i data-lucide="lock-keyhole"></i>
+                                <input id="password" name="password" type="password" class="form-control" maxlength="4096" autocomplete="current-password" required>
+                                <button id="togglePassword" class="password-toggle" type="button" aria-label="Mostrar contraseña"><i data-lucide="eye" class="fs-17"></i></button>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button class="btn login-submit" type="submit">Continuar <span class="ms-1">→</span></button>
+                        </div>
+                    </form>
+                <?php endif; ?>
+
+                <p class="login-footer text-center mt-4 mb-0">Copyright © <?= date('Y') ?> Sistema 14. Todos los derechos reservados.</p>
             </div>
-            <p class="text-center text-muted small mt-4 mb-0">Acceso exclusivo para usuarios autorizados.</p>
         </div>
     </div>
 </main>

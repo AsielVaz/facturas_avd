@@ -52,7 +52,7 @@ $buildPageUrl = static function (int $page): string {
                     <td><?= htmlspecialchars($row['date']) ?></td>
                     <td><?php if ($invoiceType === 'stamped'): ?><span class="font-monospace fs-12"><?= htmlspecialchars($row['uuid']) ?></span><small class="d-block text-muted"><?= htmlspecialchars($row['due']) ?></small><?php else: ?><?= htmlspecialchars($row['due']) ?><?php endif; ?></td>
                     <td class="fw-semibold"><?= htmlspecialchars($row['total']) ?></td>
-                    <td><span class="badge badge-soft-<?= htmlspecialchars($row['color']) ?>"><?= htmlspecialchars($row['status']) ?></span></td>
+                    <td><span class="badge badge-soft-<?= htmlspecialchars($row['color']) ?><?= $invoiceType === 'stamped' ? ' js-invoice-status' : '' ?>"<?= $invoiceType === 'stamped' ? ' data-invoice-id="' . (int) $row['id'] . '"' : '' ?>><?= htmlspecialchars($row['status']) ?></span></td>
                     <td class="text-end pe-3">
                         <?php if ($invoiceType === 'stamped'): ?>
                             <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver PDF" aria-label="Ver PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
