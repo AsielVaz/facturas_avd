@@ -96,6 +96,7 @@ require 'templates/page-start.php';
     <div class="alert alert-danger"><i data-lucide="circle-alert" class="fs-18 me-2"></i><?= htmlspecialchars($selectionError) ?></div>
 <?php endif; ?>
 
+<?php if (false): // Indicadores de empresas ocultos temporalmente; conservar para uso futuro. ?>
 <div class="row g-3 mb-4">
 <?php
 $cards = [
@@ -111,6 +112,7 @@ foreach ($cards as $card) {
 }
 ?>
 </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card-body border-bottom">

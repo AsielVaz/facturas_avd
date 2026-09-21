@@ -518,6 +518,10 @@ final class Autenticacion
 
     private static function seleccionarPrimeraEmpresaAsignada(PDO $conexion, int $usuarioId): void
     {
+        if (self::seleccionarEmpresaRecordada($conexion, $usuarioId)) {
+            return;
+        }
+
         $consulta = $conexion->prepare(
             "SELECT e.id AS empresa_id, e.razon, e.logo, cc.id AS clave_id
              FROM cliente_empresa ce
@@ -541,6 +545,53 @@ final class Autenticacion
                 (string) $empresa['razon']
             );
         }
+    }
+
+    private static function seleccionarEmpresaRecordada(PDO $conexion, int $usuarioId): bool
+    {
+        $consultaPreferencia = $conexion->prepare(
+            'SELECT empresa_asignada FROM usuarios WHERE id = :usuario LIMIT 1'
+        );
+        $consultaPreferencia->execute([':usuario' => $usuarioId]);
+        $empresaId = (int) $consultaPreferencia->fetchColumn();
+        if ($empresaId <= 0) {
+            return false;
+        }
+
+        $restringir = self::accesoRestringidoAEmpresas();
+        $consulta = $conexion->prepare(
+            "SELECT e.id AS empresa_id, e.razon, e.logo, cc.id AS clave_id
+             FROM empresas e
+             INNER JOIN claves_cortas cc
+                ON cc.id = (
+                    SELECT MIN(cc2.id) FROM claves_cortas cc2
+                    WHERE UPPER(TRIM(cc2.rfc)) = UPPER(TRIM(e.rfc))
+                )
+             WHERE e.id = :empresa" . ($restringir
+                ? " AND EXISTS (
+                        SELECT 1 FROM cliente_empresa ce
+                        WHERE ce.id_usuario = :usuario AND ce.id_empresa = e.id
+                    )"
+                : '') . "
+             LIMIT 1"
+        );
+        $consulta->bindValue(':empresa', $empresaId, PDO::PARAM_INT);
+        if ($restringir) {
+            $consulta->bindValue(':usuario', $usuarioId, PDO::PARAM_INT);
+        }
+        $consulta->execute();
+        $empresa = $consulta->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($empresa)) {
+            return false;
+        }
+
+        SesionEmpresa::cambiar(
+            (int) $empresa['empresa_id'],
+            (int) $empresa['clave_id'],
+            (string) $empresa['logo'],
+            (string) $empresa['razon']
+        );
+        return true;
     }
 
     private static function asegurarEmpresaActual(PDO $conexion): bool

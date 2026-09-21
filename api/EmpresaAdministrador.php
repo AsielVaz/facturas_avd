@@ -75,6 +75,18 @@ final class EmpresaAdministrador
             throw new RuntimeException('La empresa y la clave corta no tienen el mismo RFC.');
         }
 
+        $usuarioId = Autenticacion::usuarioActualId();
+        if ($usuarioId <= 0) {
+            throw new RuntimeException('La sesión del usuario ya no está disponible.');
+        }
+        $recordar = $this->conexion->prepare(
+            'UPDATE usuarios SET empresa_asignada = :empresa WHERE id = :usuario'
+        );
+        $recordar->execute([
+            ':empresa' => (int) $coincidencia['empresa_id'],
+            ':usuario' => $usuarioId,
+        ]);
+
         SesionEmpresa::cambiar(
             (int) $coincidencia['empresa_id'],
             (int) $coincidencia['clave_id'],

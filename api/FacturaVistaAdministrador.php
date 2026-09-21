@@ -49,11 +49,12 @@ final class FacturaVistaAdministrador
         $fechaTimbrado = !empty($fila['fecha_timbrado']) ? new DateTimeImmutable((string) $fila['fecha_timbrado']) : null;
         $uuid = trim((string) ($fila['uuid'] ?? ''));
         $moneda = (string) ($fila['moneda'] ?? 'MXN');
+        $formatoFecha = $tipo === 'timbradas' ? 'd-M.Y' : 'd/m/Y';
 
         if ($tipo === 'timbradas') {
             $estado = $esCancelada ? 'Cancelada' : 'Vigente';
             $color = $esCancelada ? 'danger' : 'success';
-            $detalle = ($fechaTimbrado?->format('d/m/Y') ?? 'Sin fecha') . (!empty($fila['hora_timbrado']) ? ' · ' . substr((string) $fila['hora_timbrado'], 0, 5) : '');
+            $detalle = ($fechaTimbrado?->format($formatoFecha) ?? 'Sin fecha') . (!empty($fila['hora_timbrado']) ? ' · ' . substr((string) $fila['hora_timbrado'], 0, 5) : '');
         } else {
             $estado = $esError ? 'Error' : 'Pendiente';
             $color = $esError ? 'danger' : 'warning';
@@ -67,7 +68,7 @@ final class FacturaVistaAdministrador
             'initials' => $this->obtenerIniciales($cliente),
             'client' => $cliente !== '' ? $cliente : 'Cliente sin nombre',
             'rfc' => trim((string) ($fila['rfc'] ?? '')) ?: 'RFC no disponible',
-            'date' => $fecha?->format('d/m/Y') ?? 'Sin fecha',
+            'date' => $fecha?->format($formatoFecha) ?? 'Sin fecha',
             'due' => $detalle,
             'total' => ($moneda === 'USD' ? 'US$ ' : '$') . number_format((float) ($fila['total'] ?? 0), 2),
             'status' => $estado,
