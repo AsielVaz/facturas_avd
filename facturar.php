@@ -63,7 +63,7 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . '<div class="form-check form-switch mb-0"><input id="invoiceTypeSwitch" class="form-check-input" type="checkbox" role="switch" '
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
     . ($facturaCompletaInicial ? 'Factura avanzada' : 'Factura sencilla') . '</label></div>'
-    . '<small id="invoiceTypeHint" class="d-block text-muted">Selección manual; el RFC ajusta los impuestos.</small></div></div>'
+    . '<small id="invoiceTypeHint" class="d-block text-muted"></small></div></div>'
     . '<a href="facturas.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a inicio</a></div>';
 require 'templates/page-start.php';
 ?>
@@ -350,10 +350,13 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     }
 
     function updateVatDisplay() {
-        vatRateSelect.disabled = !receiverPersonType;
+        const complete = isCompleteInvoice();
+        vatRateSelect.disabled = complete && !receiverPersonType;
         if (!receiverPersonType) {
-            vatRateSelect.value = '';
-            vatRateHelp.textContent = 'Selecciona un perfil fiscal para elegir el IVA.';
+            vatRateSelect.value = complete ? '' : (vatRateSelect.value || '16');
+            vatRateHelp.textContent = complete
+                ? 'Selecciona un perfil fiscal para elegir el IVA.'
+                : 'IVA 16% predeterminado; puedes cambiarlo según corresponda.';
             return;
         }
         if (vatRateSelect.value === 'concepto') {
@@ -399,8 +402,10 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             vatRateSelect.value = ['concepto', '0', '16'].includes(editing.iva_modo)
                 ? editing.iva_modo
                 : 'concepto';
-        } else {
+        } else if (isCompleteInvoice()) {
             vatRateSelect.value = moral ? 'concepto' : '16';
+        } else if (!['concepto', '0', '16'].includes(vatRateSelect.value)) {
+            vatRateSelect.value = '16';
         }
         if (restoringEditingRetentions) {
             const savedIsrRate = Number(editing.retencion_isr_tasa) || 0;
@@ -507,7 +512,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         return select;
     }
 
-    function addItem(initial = null) {
+    function addItem(initial = null, focusNewItem = false) {
         rowSequence += 1;
         const row = document.createElement('tr');
         row.dataset.row = String(rowSequence);
@@ -529,7 +534,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             row.querySelector('.item-discount').value = initial.descuento || 0;
             row.querySelector('.item-description').value = initial.descripcion || '';
             conceptChanged(row, false);
-        } else {
+        } else if (focusNewItem) {
             select.focus();
         }
         if (window.lucide) window.lucide.createIcons();
@@ -660,7 +665,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         exchangeInput.readOnly = isMxn;
         if (isMxn) exchangeInput.value = '1';
     });
-    document.getElementById('addItemButton').addEventListener('click', () => addItem());
+    document.getElementById('addItemButton').addEventListener('click', () => addItem(null, true));
     itemsBody.addEventListener('change', event => {
         const row = event.target.closest('tr');
         if (event.target.classList.contains('item-concept')) conceptChanged(row); else calculate();
