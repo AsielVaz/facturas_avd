@@ -43,6 +43,7 @@ final class FacturaAdministrador
                     f.folio,
                     f.serie,
                     f.status,
+                    f.cancelado,
                     f.status_pago,
                     f.status_error,
                     f.uuid,
@@ -89,7 +90,7 @@ final class FacturaAdministrador
                     COUNT(*) AS total,
                     COALESCE(SUM(COALESCE(f.xml_total, f.total_factura, f.total_iva, 0)), 0) AS importe,
                     SUM(LOWER(COALESCE(f.status, '')) = 'error' OR COALESCE(f.status_error, '') <> '') AS errores,
-                    SUM(LOWER(COALESCE(f.status, '')) LIKE '%cancel%') AS canceladas,
+                    SUM(f.cancelado = 1 OR LOWER(COALESCE(f.status, '')) LIKE '%cancel%') AS canceladas,
                     SUM(DATE_FORMAT(f.fecha, '%Y-%m') = (
                         SELECT DATE_FORMAT(MAX(f2.fecha), '%Y-%m')
                         FROM facturas f2

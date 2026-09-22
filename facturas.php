@@ -108,8 +108,9 @@ $pageScripts = <<<'HTML'
     const invoiceIds = [...new Set(badges.map(badge => Number(badge.dataset.invoiceId)).filter(Number.isInteger))];
     badges.forEach(badge => {
         badge.dataset.localStatus = badge.textContent.trim();
-        badge.textContent = 'Consultando SAT…';
-        badge.className = 'badge badge-soft-secondary js-invoice-status';
+        badge.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Consultando SAT</span>';
+        badge.className = 'badge badge-soft-secondary js-invoice-status d-inline-flex align-items-center gap-1';
+        badge.setAttribute('aria-label', 'Consultando estado en el SAT');
     });
 
     fetch(config.endpoint, {
@@ -129,6 +130,7 @@ $pageScripts = <<<'HTML'
                 if (!result || !result.comprobado) {
                     badge.textContent = badge.dataset.localStatus || 'Sin comprobar';
                     badge.className = 'badge badge-soft-warning js-invoice-status';
+                    badge.removeAttribute('aria-label');
                     badge.title = result?.error || 'No fue posible comprobar esta factura en el SAT.';
                     return;
                 }
@@ -137,6 +139,7 @@ $pageScripts = <<<'HTML'
                 const color = result.cancelada ? 'danger' : (normalized.includes('vigente') ? 'success' : 'warning');
                 badge.textContent = state;
                 badge.className = 'badge badge-soft-' + color + ' js-invoice-status';
+                badge.removeAttribute('aria-label');
                 badge.title = [
                     result.codigo_estatus,
                     result.es_cancelable ? 'Cancelación: ' + result.es_cancelable : '',
@@ -150,6 +153,7 @@ $pageScripts = <<<'HTML'
             badges.forEach(badge => {
                 badge.textContent = badge.dataset.localStatus || 'Sin comprobar';
                 badge.className = 'badge badge-soft-warning js-invoice-status';
+                badge.removeAttribute('aria-label');
                 badge.title = error.message;
             });
         });

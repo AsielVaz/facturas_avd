@@ -40,12 +40,14 @@ try {
 
     $empresa = SesionEmpresa::empresaActual();
     $usuario = Autenticacion::usuarioActualId();
-    $claveSesion = 'u' . $usuario . ':e' . $empresa;
+    $claveSesion = 'v2:u' . $usuario . ':e' . $empresa;
     $_SESSION['sat_cfdi_estados'] ??= [];
     $_SESSION['sat_cfdi_estados'][$claveSesion] ??= [];
     $cache =& $_SESSION['sat_cfdi_estados'][$claveSesion];
     $estados = [];
     $pendientes = [];
+    $consultadasSat = 0;
+    $omitidasCanceladas = 0;
     foreach ($ids as $id) {
         if (isset($cache[$id]) && is_array($cache[$id]) && (!empty($cache[$id]['comprobado']) || !empty($cache[$id]['cancelada']))) {
             $estados[(string) $id] = $cache[$id] + ['desde_sesion' => true];
@@ -56,12 +58,14 @@ try {
 
     if ($pendientes !== []) {
         $marcadores = implode(',', array_fill(0, count($pendientes), '?'));
-        $consulta = Conexion::obtener()->prepare(
+        $conexion = Conexion::obtener();
+        $consulta = $conexion->prepare(
             "SELECT f.id, f.uuid,
                     UPPER(TRIM(e.rfc)) AS emisor_rfc,
                     UPPER(TRIM(COALESCE(NULLIF(cc.rfc, ''), c.rfc, ''))) AS receptor_rfc,
                     COALESCE(f.xml_total, f.total_factura, f.total_iva, 0) AS total,
-                    COALESCE(f.sello_cfd, '') AS sello_cfd
+                    COALESCE(f.sello_cfd, '') AS sello_cfd,
+                    f.cancelado
              FROM facturas f
              INNER JOIN empresas e ON e.id = f.razon
              LEFT JOIN clientes c ON c.id = f.nombre
@@ -86,9 +90,34 @@ try {
                 ];
                 continue;
             }
+            if (!empty($facturas[$id]['cancelado'])) {
+                $omitidasCanceladas++;
+                $estado = [
+                    'codigo_estatus' => 'Cancelación confirmada previamente por el SAT.',
+                    'es_cancelable' => '',
+                    'estado' => 'Cancelado',
+                    'estatus_cancelacion' => 'Cancelado',
+                    'validacion_efos' => '',
+                    'comprobado' => true,
+                    'cancelada' => true,
+                    'consultado_en' => null,
+                    'persistido' => true,
+                ];
+                $cache[$id] = $estado;
+                $estados[(string) $id] = $estado + ['desde_sesion' => false];
+                continue;
+            }
             try {
+                $consultadasSat++;
                 $estado = $servicio->consultar($facturas[$id]);
                 $estado['consultado_en'] = date(DATE_ATOM);
+                if ($estado['cancelada']) {
+                    $actualizar = $conexion->prepare(
+                        'UPDATE facturas SET cancelado = 1 WHERE id = :factura AND razon = :empresa'
+                    );
+                    $actualizar->execute([':factura' => $id, ':empresa' => $empresa]);
+                    $estado['persistido'] = true;
+                }
                 $cache[$id] = $estado;
                 $estados[(string) $id] = $estado + ['desde_sesion' => false];
             } catch (SatEstadoCfdiException $error) {
@@ -106,8 +135,9 @@ try {
         'ok' => true,
         'empresa' => $empresa,
         'estados' => $estados,
-        'consultadas' => count($pendientes),
+        'consultadas' => $consultadasSat,
         'desde_sesion' => count($ids) - count($pendientes),
+        'omitidas_canceladas' => $omitidasCanceladas,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 } catch (JsonException $error) {
     http_response_code(400);

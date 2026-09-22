@@ -44,7 +44,7 @@ final class FacturaVistaAdministrador
         $cliente = trim((string) ($fila['cliente'] ?? 'Cliente sin nombre'), " \t\n\r\0\x0B\"");
         $statusError = trim((string) ($fila['status_error'] ?? ''));
         $esError = strtolower((string) ($fila['status'] ?? '')) === 'error' || $statusError !== '';
-        $esCancelada = str_contains(strtolower((string) ($fila['status'] ?? '')), 'cancel');
+        $esCancelada = !empty($fila['cancelado']) || str_contains(strtolower((string) ($fila['status'] ?? '')), 'cancel');
         $fecha = !empty($fila['fecha']) ? new DateTimeImmutable((string) $fila['fecha']) : null;
         $fechaTimbrado = !empty($fila['fecha_timbrado']) ? new DateTimeImmutable((string) $fila['fecha_timbrado']) : null;
         $uuid = trim((string) ($fila['uuid'] ?? ''));
