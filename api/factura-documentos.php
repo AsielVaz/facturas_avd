@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/FacturaPdfAdministrador.php';
+require_once __DIR__ . '/FacturaDocumentoLocalizador.php';
 require_once __DIR__ . '/Autenticacion.php';
 Autenticacion::exigirApi();
 
@@ -20,7 +21,7 @@ try {
     }
 
     $consulta = $conexion->prepare(
-        'SELECT f.uuid, f.xml_firmado, e.razon AS empresa_nombre
+        'SELECT f.uuid, f.xml_firmado, f.token, f.serie, f.folio, e.razon AS empresa_nombre
          FROM facturas f
          INNER JOIN empresas e ON e.id = f.razon
          WHERE f.id = :factura AND f.razon = :empresa LIMIT 1'
@@ -31,21 +32,25 @@ try {
         throw new RuntimeException('La factura timbrada no existe o no pertenece a la empresa activa.');
     }
 
-    $rutaXml = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'firmados'
-        . DIRECTORY_SEPARATOR . 'XML-factura-' . $facturaId . '.xml';
-    $contenidoXml = is_file($rutaXml) ? file_get_contents($rutaXml) : false;
-    if (!is_string($contenidoXml) || trim($contenidoXml) === '') {
-        $contenidoXml = trim((string) ($factura['xml_firmado'] ?? ''));
-    }
-    if ($contenidoXml === '') {
+    $localizador = new FacturaDocumentoLocalizador(dirname(__DIR__));
+    $contenidoXml = $localizador->obtenerXml($facturaId, $factura);
+    if (!is_string($contenidoXml) || $contenidoXml === '') {
         throw new RuntimeException('No se encontró el XML timbrado de la factura.');
     }
 
-    $pdf = (new FacturaPdfAdministrador(
-        $conexion,
-        dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'pdf',
-        dirname(__DIR__) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'pdfs'
-    ))->generar($facturaId, $empresaId);
+    try {
+        $pdf = (new FacturaPdfAdministrador(
+            $conexion,
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'pdf',
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'pdfs'
+        ))->generar($facturaId, $empresaId);
+        $contenidoPdf = (string) $pdf['contenido'];
+    } catch (Throwable $error) {
+        $contenidoPdf = $localizador->obtenerPdf($facturaId, $factura);
+        if (!is_string($contenidoPdf) || $contenidoPdf === '') {
+            throw $error;
+        }
+    }
 
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('El servidor no tiene habilitado el soporte para archivos ZIP.');
@@ -65,7 +70,7 @@ try {
         throw new RuntimeException('No fue posible crear el paquete de documentos.');
     }
     if (!$zip->addFromString($nombreBase . '.xml', $contenidoXml)
-        || !$zip->addFromString($nombreBase . '.pdf', (string) $pdf['contenido'])) {
+        || !$zip->addFromString($nombreBase . '.pdf', $contenidoPdf)) {
         $zip->close();
         throw new RuntimeException('No fue posible agregar los comprobantes al paquete.');
     }

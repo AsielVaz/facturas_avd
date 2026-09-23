@@ -6,6 +6,7 @@ require_once __DIR__ . '/FacturaAdministrador.php';
 require_once __DIR__ . '/FacturaCreacionAdministrador.php';
 require_once __DIR__ . '/FacturaPendienteAdministrador.php';
 require_once __DIR__ . '/CfdiTimbradoServicio.php';
+require_once __DIR__ . '/FacturaDocumentoLocalizador.php';
 require_once __DIR__ . '/Autenticacion.php';
 Autenticacion::exigirApi();
 
@@ -55,24 +56,24 @@ try {
         $tipoXml = strtolower(trim((string) ($_GET['tipo'] ?? 'sin_firma')));
         $timbrado = $tipoXml === 'timbrado';
         $consulta = $conexion->prepare(
-            'SELECT f.uuid, f.xml_firmado, e.razon AS empresa_nombre
+            'SELECT f.uuid, f.xml_firmado, f.token, f.serie, f.folio, e.razon AS empresa_nombre
              FROM facturas f
              INNER JOIN empresas e ON e.id = f.razon
              WHERE f.id = :factura AND f.razon = :empresa LIMIT 1'
         );
         $consulta->execute([':factura' => $facturaId, ':empresa' => SesionEmpresa::empresaActual()]);
         $facturaXml = $consulta->fetch(PDO::FETCH_ASSOC);
-        $ruta = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . ($timbrado ? 'firmados' : 'sinfirma')
+        $ruta = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma'
             . DIRECTORY_SEPARATOR . 'XML-factura-' . $facturaId . '.xml';
-        $contenidoBase = $timbrado && is_array($facturaXml) ? trim((string) ($facturaXml['xml_firmado'] ?? '')) : '';
-        if ($facturaId <= 0 || !is_array($facturaXml) || ($timbrado && trim((string) ($facturaXml['uuid'] ?? '')) === '') || (!is_file($ruta) && $contenidoBase === '')) {
+        $contenidoXml = $timbrado && is_array($facturaXml)
+            ? (new FacturaDocumentoLocalizador(dirname(__DIR__)))->obtenerXml($facturaId, $facturaXml)
+            : (is_file($ruta) ? file_get_contents($ruta) : false);
+        if ($facturaId <= 0 || !is_array($facturaXml)
+            || ($timbrado && trim((string) ($facturaXml['uuid'] ?? '')) === '')
+            || !is_string($contenidoXml) || trim($contenidoXml) === '') {
             http_response_code(404);
             echo json_encode(['ok' => false, 'error' => 'El XML solicitado no existe.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             exit;
-        }
-        $contenidoXml = is_file($ruta) ? file_get_contents($ruta) : $contenidoBase;
-        if (!is_string($contenidoXml) || $contenidoXml === '') {
-            throw new RuntimeException('No fue posible leer el XML solicitado.');
         }
         header('Content-Type: application/xml; charset=utf-8');
         $empresaNombre = strtr(trim((string) ($facturaXml['empresa_nombre'] ?? 'Empresa')), [
