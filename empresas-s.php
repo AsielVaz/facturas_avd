@@ -19,7 +19,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 max(0, (int) ($_POST['clave_id'] ?? 0))
             );
             $_SESSION['empresas_csrf'] = bin2hex(random_bytes(32));
-            header('Location: empresas-s.php?seleccion=ok');
+            header('Location: facturas.php', true, 303);
             exit;
         } catch (Throwable $error) {
             $selectionError = $error->getMessage() === 'Tu usuario no tiene permiso para utilizar esta empresa.'
