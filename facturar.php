@@ -196,7 +196,11 @@ require 'templates/page-start.php';
                     </div>
                     <div class="table-responsive">
                         <table class="table align-middle mb-0 invoice-concepts-table">
-                            <thead><tr><th class="ps-3">Concepto</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Importe</th><th>IVA</th><th>Total</th><th></th></tr></thead>
+                            <thead><tr><th class="ps-3">Concepto</th><th>Cantidad</th><th>Precio unitario</th>
+                            <!-- Columnas de partida reservadas para uso futuro:
+                            <th>Descuento</th><th>Importe</th><th>IVA</th><th>Total</th>
+                            -->
+                            <th></th></tr></thead>
                             <tbody id="invoiceItems"></tbody>
                         </table>
                     </div>
@@ -519,9 +523,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         row.dataset.detailId = String(initial?.detalle_id || 0);
         row.innerHTML = '<td class="ps-3"><div class="concept-select-slot"></div><textarea class="form-control form-control-sm item-description mt-1" rows="2" maxlength="1000" placeholder="Descripción del concepto"></textarea><small class="item-help text-muted"></small></td>' +
             '<td><input type="number" class="form-control form-control-sm item-quantity" min="0.000001" step="0.000001" value="1"></td>' +
-            '<td><input type="number" class="form-control form-control-sm item-price" min="0" step="0.000001" value="0"></td>' +
+            '<td><input type="number" class="form-control form-control-sm item-price" min="0" step="0.000001" value="0"><input type="hidden" class="item-discount" value="0"></td>' +
+            /* Celdas de partida reservadas para uso futuro. Al restaurarlas, quitar item-discount oculto del precio.
             '<td><input type="number" class="form-control form-control-sm item-discount" min="0" step="0.01" value="0" ' + (editing ? 'disabled title="El esquema actual no almacena descuentos por partida"' : '') + '></td>' +
             '<td class="item-subtotal invoice-money text-nowrap">$0.00</td><td class="item-tax invoice-money text-nowrap">$0.00</td><td class="item-total invoice-money fw-semibold text-nowrap">$0.00</td>' +
+            */
             '<td class="pe-3"><button type="button" class="btn btn-sm btn-soft-danger item-remove" aria-label="Eliminar concepto"><i data-lucide="trash-2" class="fs-15"></i></button></td>';
         const select = createConceptSelect();
         row.querySelector('.concept-select-slot').append(select);
@@ -573,9 +579,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             withholdingIsr += rowWithholdingIsr;
             withholdingVat += rowWithholdingVat;
             total += values.total - rowWithholdingIsr - rowWithholdingVat;
+            /* Mostrar valores por partida si se reactivan las columnas de la tabla:
             row.querySelector('.item-subtotal').textContent = money(values.subtotal);
             row.querySelector('.item-tax').textContent = money(values.tax);
             row.querySelector('.item-total').textContent = money(values.total);
+            */
         });
         document.getElementById('summarySubtotal').textContent = money(subtotal);
         document.getElementById('summaryDiscount').textContent = '-' + money(discount);
