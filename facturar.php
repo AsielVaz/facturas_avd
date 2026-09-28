@@ -121,7 +121,7 @@ require 'templates/page-start.php';
                             <div class="col-md-6">
                                 <label for="clientSelect" class="form-label">Cliente <span class="text-danger">*</span></label>
                                 <select id="clientSelect" class="form-select" required>
-                                    <option value="">Seleccionar cliente...</option>
+                                    <option value=""><?= $clientes === [] ? 'No tienes un cliente asignado' : 'Seleccionar cliente...' ?></option>
                                     <?php foreach ($clientes as $cliente): ?>
                                         <option value="<?= (int) $cliente['id'] ?>" data-facturable="<?= !empty($cliente['facturable']) ? '1' : '0' ?>" <?= $modoEdicion && (int) $facturaPendiente['cliente_id'] === (int) $cliente['id'] ? 'selected' : '' ?>>
                                             <?= htmlspecialchars((string) $cliente['nombre']) ?> · <?= (int) $cliente['perfiles'] ?> perfil(es)<?= empty($cliente['facturable']) ? ' · incompleto' : '' ?>

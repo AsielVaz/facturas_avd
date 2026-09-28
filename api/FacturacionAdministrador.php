@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Conexion.php';
 require_once __DIR__ . '/SesionEmpresa.php';
+require_once __DIR__ . '/Autenticacion.php';
 
 final class FacturacionAdministrador
 {
@@ -81,11 +82,13 @@ final class FacturacionAdministrador
                         AND cc.regimen_fiscal BETWEEN 600 AND 999
                     ) AS perfiles_completos
                 FROM clientes c
+                INNER JOIN usuarios u ON u.cliente = c.id AND u.id = :usuario
                 LEFT JOIN claves_cortas cc ON cc.id_cliente = c.id
                 WHERE (:buscar_vacio = '' OR c.nombre LIKE :buscar_nombre OR c.razon_social LIKE :buscar_razon)
                 GROUP BY c.id, c.nombre, c.razon_social, c.activo
                 ORDER BY (COALESCE(c.activo, 1) = 1) DESC, nombre, c.id";
         $consulta = $this->conexion->prepare($sql);
+        $consulta->bindValue(':usuario', Autenticacion::usuarioActualId(), PDO::PARAM_INT);
         $consulta->bindValue(':buscar_vacio', $buscar, PDO::PARAM_STR);
         $consulta->bindValue(':buscar_nombre', '%' . $buscar . '%', PDO::PARAM_STR);
         $consulta->bindValue(':buscar_razon', '%' . $buscar . '%', PDO::PARAM_STR);
@@ -106,14 +109,17 @@ final class FacturacionAdministrador
     public function listarPerfilesCliente(int $clienteId): array
     {
         $consultaCliente = $this->conexion->prepare(
-            "SELECT id, TRIM(BOTH '\"' FROM TRIM(COALESCE(NULLIF(nombre, ''), NULLIF(razon_social, ''), CONCAT('Cliente #', id)))) AS nombre
-             FROM clientes WHERE id = :cliente LIMIT 1"
+            "SELECT c.id, TRIM(BOTH '\"' FROM TRIM(COALESCE(NULLIF(c.nombre, ''), NULLIF(c.razon_social, ''), CONCAT('Cliente #', c.id)))) AS nombre
+             FROM clientes c
+             INNER JOIN usuarios u ON u.cliente = c.id AND u.id = :usuario
+             WHERE c.id = :cliente LIMIT 1"
         );
         $consultaCliente->bindValue(':cliente', $clienteId, PDO::PARAM_INT);
+        $consultaCliente->bindValue(':usuario', Autenticacion::usuarioActualId(), PDO::PARAM_INT);
         $consultaCliente->execute();
         $cliente = $consultaCliente->fetch();
         if (!$cliente) {
-            throw new RuntimeException('El cliente seleccionado no existe.');
+            throw new RuntimeException('El cliente seleccionado no está asignado a tu usuario.');
         }
 
         $consulta = $this->conexion->prepare(
