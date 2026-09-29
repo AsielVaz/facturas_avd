@@ -28,7 +28,7 @@ final class EmpresaAdministrador
                     cc.razon_social AS clave_razon_social,
                     cc.rfc AS clave_rfc
                 FROM empresas e
-                LEFT JOIN claves_cortas cc
+                INNER JOIN claves_cortas cc
                     ON cc.id = (
                         SELECT MIN(cc2.id)
                         FROM claves_cortas cc2
