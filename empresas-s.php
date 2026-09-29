@@ -86,6 +86,12 @@ $pageAction = '<a href="facturas.php" class="btn btn-soft-secondary"><i data-luc
 require 'templates/page-start.php';
 ?>
 
+<style>
+    .company-name-select { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .company-name-select:hover, .company-name-select:focus-visible { color: var(--bs-primary); text-decoration: underline; }
+    .company-name-select:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: 2px; border-radius: 2px; }
+</style>
+
 <?php if (($_GET['seleccion'] ?? '') === 'ok'): ?>
     <div class="alert alert-success d-flex align-items-center"><i data-lucide="circle-check" class="fs-19 me-2"></i><div><strong>Empresa actualizada.</strong> Todos los modulos ahora utilizan la empresa <?= $currentCompany ?> y la clave <?= $currentKey ?>.</div></div>
 <?php endif; ?>
@@ -122,7 +128,7 @@ foreach ($cards as $card) {
     </div>
     <div class="table-responsive">
         <table class="table table-hover text-nowrap mb-0 erp-table" id="companiesTable">
-            <thead><tr><th class="ps-3">ID empresa</th><th>Empresa</th><th>RFC empresa</th><th>ID clave</th><th>Clave corta</th><th>Coincidencia</th><th class="text-end pe-3">Seleccionar</th></tr></thead>
+            <thead><tr><th class="ps-3">ID empresa</th><th>Empresa</th><th>RFC empresa</th><th>ID clave</th><th>Clave corta</th><th>Coincidencia</th></tr></thead>
             <tbody>
             <?php foreach ($companies as $company): ?>
                 <?php
@@ -132,24 +138,27 @@ foreach ($cards as $card) {
                 ?>
                 <tr data-company-search="<?= htmlspecialchars($searchText) ?>" class="<?= $isCurrent ? 'table-active' : '' ?>">
                     <td class="ps-3 font-monospace fw-semibold">#<?= (int) $company['empresa_id'] ?></td>
-                    <td style="min-width:300px;white-space:normal"><div class="d-flex align-items-center gap-2"><span class="erp-avatar bg-<?= $isCurrent ? 'success' : 'primary' ?>-subtle text-<?= $isCurrent ? 'success' : 'primary' ?>"><i data-lucide="building" class="fs-18"></i></span><div><span class="fw-semibold"><?= htmlspecialchars((string) $company['empresa']) ?></span><?php if ($isCurrent): ?><small class="d-block text-success">Empresa utilizada actualmente</small><?php endif; ?></div></div></td>
+                    <td style="min-width:300px;white-space:normal"><div class="d-flex align-items-center gap-2"><span class="erp-avatar bg-<?= $isCurrent ? 'success' : 'primary' ?>-subtle text-<?= $isCurrent ? 'success' : 'primary' ?>"><i data-lucide="building" class="fs-18"></i></span><div>
+                        <?php if ($isCurrent || !$hasMatch): ?>
+                            <span class="fw-semibold"><?= htmlspecialchars((string) $company['empresa']) ?></span>
+                            <?php if ($isCurrent): ?><small class="d-block text-success">Empresa utilizada actualmente</small><?php endif; ?>
+                        <?php else: ?>
+                            <form method="post" class="m-0">
+                                <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['empresas_csrf']) ?>">
+                                <input type="hidden" name="empresa_id" value="<?= (int) $company['empresa_id'] ?>">
+                                <input type="hidden" name="clave_id" value="<?= (int) $company['clave_id'] ?>">
+                                <button class="company-name-select fw-semibold" type="submit" aria-label="Usar empresa <?= htmlspecialchars((string) $company['empresa']) ?>"><?= htmlspecialchars((string) $company['empresa']) ?></button>
+                            </form>
+                        <?php endif; ?>
+                    </div></div></td>
                     <td class="font-monospace"><?= htmlspecialchars(trim((string) $company['rfc']) ?: 'Sin RFC') ?></td>
                     <td class="font-monospace"><?= $hasMatch ? '#' . (int) $company['clave_id'] : '—' ?></td>
                     <td><?= $hasMatch ? '<span class="badge badge-soft-primary">' . htmlspecialchars((string) $company['clave_corta']) . '</span>' : '<span class="text-muted">Sin clave</span>' ?></td>
                     <td><?php if ($hasMatch): ?><span class="badge badge-soft-success"><i data-lucide="link-2" class="fs-13 me-1"></i>RFC coincide</span><?php else: ?><span class="badge badge-soft-warning"><i data-lucide="unlink" class="fs-13 me-1"></i>Sin coincidencia</span><?php endif; ?></td>
-                    <td class="text-end pe-3">
-                        <?php if ($isCurrent): ?>
-                            <button class="btn btn-sm btn-success" disabled><i data-lucide="check" class="fs-15 me-1"></i>Seleccionada</button>
-                        <?php elseif ($hasMatch): ?>
-                            <form method="post" class="d-inline"><input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['empresas_csrf']) ?>"><input type="hidden" name="empresa_id" value="<?= (int) $company['empresa_id'] ?>"><input type="hidden" name="clave_id" value="<?= (int) $company['clave_id'] ?>"><button class="btn btn-sm btn-primary" type="submit"><i data-lucide="check-circle-2" class="fs-15 me-1"></i>Usar empresa</button></form>
-                        <?php else: ?>
-                            <button class="btn btn-sm btn-soft-secondary" disabled title="No existe una clave corta con el mismo RFC">No disponible</button>
-                        <?php endif; ?>
-                    </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($companies === []): ?><tr><td colspan="7" class="text-center py-5 text-muted">No hay empresas disponibles.</td></tr><?php endif; ?>
-            <tr id="noCompanyResults" class="d-none"><td colspan="7" class="text-center py-5 text-muted">No se encontraron empresas con este criterio.</td></tr>
+            <?php if ($companies === []): ?><tr><td colspan="6" class="text-center py-5 text-muted">No hay empresas disponibles.</td></tr><?php endif; ?>
+            <tr id="noCompanyResults" class="d-none"><td colspan="6" class="text-center py-5 text-muted">No se encontraron empresas con este criterio.</td></tr>
             </tbody>
         </table>
     </div>
