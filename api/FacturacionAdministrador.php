@@ -454,8 +454,8 @@ final class FacturacionAdministrador
             if (mb_strlen($descripcion, 'UTF-8') > 1000) {
                 $errores[] = "Partida {$numero}: la descripción no puede exceder 1000 caracteres.";
             }
-            if ($cantidad <= 0) {
-                $errores[] = "Partida {$numero}: la cantidad debe ser mayor que cero.";
+            if (!is_finite($cantidad) || $cantidad <= 0 || floor($cantidad) !== $cantidad) {
+                $errores[] = "Partida {$numero}: la cantidad debe ser un número entero mayor que cero.";
             }
             if ($concepto['unidades_max'] !== null && $cantidad > (float) $concepto['unidades_max']) {
                 $errores[] = "Partida {$numero}: la cantidad excede el máximo de {$concepto['unidades_max']}.";

@@ -230,7 +230,17 @@ require 'templates/page-start.php';
         <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
             <div class="modal-header"><div><h5 class="modal-title">Vista previa CFDI 4.0</h5><p class="text-muted mb-0 fs-13"><?= $modoEdicion ? 'Cambios guardados en la factura pendiente; aún no tiene validez fiscal.' : 'Documento no persistido y sin validez fiscal.' ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body" id="previewContent"></div>
-            <div class="modal-footer"><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>">Guardar y timbrar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
+            <div class="modal-footer"><button id="savePrefacturaButton" type="button" class="btn btn-outline-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled><i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura</button><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled>Guardar y timbrar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
+        </div></div>
+    </div>
+    <div class="modal fade" id="prefacturaPdfModal" tabindex="-1" aria-labelledby="prefacturaPdfModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+            <div class="modal-header"><div><h5 class="modal-title" id="prefacturaPdfModalTitle">Prefactura</h5><p class="text-muted mb-0 fs-13">Guardada como pendiente · Sin timbrar y sin validez fiscal</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body p-0 position-relative" style="min-height:75vh">
+                <div id="prefacturaPdfLoader" class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-body" style="z-index:2" role="status" aria-live="polite"><div class="text-center"><div class="spinner-border text-primary mb-3" aria-hidden="true"></div><p class="fw-semibold mb-0">Cargando prefactura…</p></div></div>
+                <iframe id="prefacturaPdfFrame" title="Vista previa de la prefactura en PDF" style="width:100%;height:75vh;border:0;background:#fff;visibility:hidden"></iframe>
+            </div>
+            <div class="modal-footer"><a class="btn btn-soft-secondary" href="facturas.php?tipo=prefacturas">Ver prefacturas</a><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button></div>
         </div></div>
     </div>
 <?php endif; ?>
@@ -275,14 +285,32 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const messages = document.getElementById('invoiceMessages');
     const validateButton = document.getElementById('validateButton');
     const saveInvoiceButton = document.getElementById('saveInvoiceButton');
+    const savePrefacturaButton = document.getElementById('savePrefacturaButton');
     const previewContent = document.getElementById('previewContent');
+    const previewModalElement = document.getElementById('previewModal');
+    const prefacturaPdfModalElement = document.getElementById('prefacturaPdfModal');
+    const prefacturaPdfTitle = document.getElementById('prefacturaPdfModalTitle');
+    const prefacturaPdfFrame = document.getElementById('prefacturaPdfFrame');
+    const prefacturaPdfLoader = document.getElementById('prefacturaPdfLoader');
     const concepts = new Map(config.conceptos.map(item => [String(item.id), item]));
     const editing = config.edicion;
     let profiles = new Map();
     let rowSequence = 0;
     let validatedPayload = null;
+    let prefacturaPdfUrl = null;
     let receiverPersonType = '';
     let restoringEditingRetentions = Boolean(editing);
+
+    prefacturaPdfFrame.addEventListener('load', () => {
+        prefacturaPdfLoader.classList.remove('d-flex');
+        prefacturaPdfLoader.classList.add('d-none');
+        prefacturaPdfFrame.style.visibility = 'visible';
+    });
+    prefacturaPdfModalElement.addEventListener('hidden.bs.modal', () => {
+        prefacturaPdfFrame.src = 'about:blank';
+        if (prefacturaPdfUrl) URL.revokeObjectURL(prefacturaPdfUrl);
+        window.location.reload();
+    });
 
     function money(value) {
         const currency = selectedCode(currencySelect) || 'MXN';
@@ -522,7 +550,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         row.dataset.row = String(rowSequence);
         row.dataset.detailId = String(initial?.detalle_id || 0);
         row.innerHTML = '<td class="ps-3"><div class="concept-select-slot"></div><textarea class="form-control form-control-sm item-description mt-1" rows="2" maxlength="1000" placeholder="Descripción del concepto"></textarea><small class="item-help text-muted"></small></td>' +
-            '<td><input type="number" class="form-control form-control-sm item-quantity" min="0.000001" step="0.000001" value="1"></td>' +
+            '<td><input type="number" class="form-control form-control-sm item-quantity" min="1" step="1" inputmode="numeric" value="1"></td>' +
             '<td><input type="number" class="form-control form-control-sm item-price" min="0" step="0.000001" value="0"><input type="hidden" class="item-discount" value="0"></td>' +
             /* Celdas de partida reservadas para uso futuro. Al restaurarlas, quitar item-discount oculto del precio.
             '<td><input type="number" class="form-control form-control-sm item-discount" min="0" step="0.01" value="0" ' + (editing ? 'disabled title="El esquema actual no almacena descuentos por partida"' : '') + '></td>' +
@@ -663,6 +691,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             '<div class="table-responsive"><table class="table"><thead><tr><th>#</th><th>Concepto</th><th>Unidad</th><th class="text-end">Cantidad</th><th class="text-end">Precio</th><th class="text-end">IVA</th><th class="text-end">Total</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
             '<div class="row justify-content-end"><div class="col-md-5"><div class="border rounded-3 p-3"><div class="d-flex justify-content-between"><span>Subtotal</span><strong>' + money(result.comprobante.subtotal) + '</strong></div><div class="d-flex justify-content-between"><span>Descuento</span><strong>-' + money(result.comprobante.descuento) + '</strong></div><div class="d-flex justify-content-between"><span>IVA trasladado</span><strong>' + money(result.comprobante.iva) + '</strong></div><div class="d-flex justify-content-between"><span>ISR retenido</span><strong>-' + money(result.comprobante.retencion_isr) + '</strong></div><div class="d-flex justify-content-between"><span>IVA retenido</span><strong>-' + money(result.comprobante.retencion_iva) + '</strong></div><hr><div class="d-flex justify-content-between fs-5"><span>Total ' + escapeHtml(result.comprobante.moneda) + '</span><strong>' + money(result.comprobante.total) + '</strong></div></div></div></div>';
         if (saveInvoiceButton && !editing) saveInvoiceButton.disabled = !result.valido;
+        if (savePrefacturaButton && !editing) savePrefacturaButton.disabled = !result.valido;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('previewModal')).show();
     }
 
@@ -705,6 +734,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         if (!validatedPayload || saveInvoiceButton.disabled) return;
         previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
         saveInvoiceButton.disabled = true;
+        savePrefacturaButton.disabled = true;
         saveInvoiceButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando y timbrando...';
         try {
             const response = await fetch('api/facturas.php?accion=guardar', {
@@ -770,10 +800,91 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 confirmButtonColor: error.saved ? '#d97706' : '#dc2626',
             });
             saveInvoiceButton.disabled = error.saved;
+            savePrefacturaButton.disabled = error.saved;
             saveInvoiceButton.innerHTML = error.saved
                 ? '<i data-lucide="alert-triangle" class="fs-17 me-1"></i>Guardada sin timbrar'
                 : '<i data-lucide="save" class="fs-17 me-1"></i>Guardar y timbrar factura';
             if (error.saved) validatedPayload = null;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+    savePrefacturaButton?.addEventListener('click', async () => {
+        if (!validatedPayload || savePrefacturaButton.disabled) return;
+        let savedFactura = null;
+        savePrefacturaButton.disabled = true;
+        saveInvoiceButton.disabled = true;
+        savePrefacturaButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando prefactura...';
+        try {
+            const response = await fetch('api/facturas.php?accion=guardar_prefactura', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify(validatedPayload),
+            });
+            const data = await readApiJson(response, 'guardar la prefactura');
+            if (!response.ok || !data.ok) {
+                const error = new Error(data.error || 'No fue posible guardar la prefactura.');
+                error.details = Array.isArray(data.errores) ? data.errores : [];
+                error.saved = data.guardada === true;
+                error.invoice = data.factura || null;
+                throw error;
+            }
+            validatedPayload = null;
+            savedFactura = data.factura;
+            const pdfResponse = await fetch(data.pdf_url, {credentials: 'same-origin'});
+            if (!pdfResponse.ok || !(pdfResponse.headers.get('Content-Type') || '').toLowerCase().includes('application/pdf')) {
+                const error = new Error('La prefactura se guardó, pero no fue posible abrir su PDF. Puedes descargarlo de nuevo desde Prefacturas.');
+                error.saved = true;
+                error.invoice = data.factura;
+                throw error;
+            }
+            const pdfBlob = await pdfResponse.blob();
+            if (pdfBlob.size === 0) {
+                throw new Error('La prefactura se guardó, pero el PDF descargado está vacío. Puedes volver a descargarlo desde Prefacturas.');
+            }
+            prefacturaPdfUrl = URL.createObjectURL(pdfBlob);
+            const nombreArchivo = /filename="?([^";]+)"?/i.exec(pdfResponse.headers.get('Content-Disposition') || '')?.[1]
+                || 'Prefactura-' + data.factura.serie + '-' + data.factura.folio + '.pdf';
+            const download = document.createElement('a');
+            download.href = prefacturaPdfUrl;
+            download.download = nombreArchivo;
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
+            prefacturaPdfTitle.textContent = 'Prefactura ' + data.factura.serie + '-' + data.factura.folio;
+            prefacturaPdfLoader.classList.remove('d-none');
+            prefacturaPdfLoader.classList.add('d-flex');
+            prefacturaPdfFrame.style.visibility = 'hidden';
+            previewModalElement.addEventListener('hidden.bs.modal', () => {
+                prefacturaPdfFrame.src = prefacturaPdfUrl;
+                bootstrap.Modal.getOrCreateInstance(prefacturaPdfModalElement).show();
+            }, {once: true});
+            bootstrap.Modal.getOrCreateInstance(previewModalElement).hide();
+        } catch (error) {
+            if (savedFactura) {
+                error.saved = true;
+                error.invoice = savedFactura;
+            }
+            const uncertainNetwork = error instanceof TypeError && /fetch|network|conexi[oó]n|failed/i.test(error.message || '');
+            const fallback = uncertainNetwork
+                ? 'No se pudo confirmar la respuesta del servidor. Revisa Facturas pendientes antes de volver a guardar para evitar un duplicado.'
+                : (error.message || 'No fue posible guardar la prefactura.');
+            const details = Array.isArray(error.details) && error.details.length ? error.details : [fallback];
+            await Swal.fire({
+                icon: error.saved || uncertainNetwork ? 'warning' : 'error',
+                title: error.saved ? 'La prefactura quedó guardada' : (uncertainNetwork ? 'Confirma si se guardó' : 'No se pudo guardar la prefactura'),
+                html: '<ul class="text-start mb-0">' + details.map(detail => '<li>' + escapeHtml(detail) + '</li>').join('') + '</ul>'
+                    + (error.saved && error.invoice ? '<div class="mt-2"><a href="api/factura-pdf.php?id=' + encodeURIComponent(error.invoice.id) + '" download>Descargar PDF de la prefactura</a></div>' : ''),
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#dc2626',
+            });
+            if (error.saved || uncertainNetwork) {
+                validatedPayload = null;
+                window.location.reload();
+                return;
+            }
+            savePrefacturaButton.disabled = false;
+            saveInvoiceButton.disabled = false;
+            savePrefacturaButton.innerHTML = '<i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura';
             if (window.lucide) window.lucide.createIcons();
         }
     });

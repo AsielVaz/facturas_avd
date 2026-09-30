@@ -1,9 +1,13 @@
 <?php
 $invoiceRows = $invoiceRows ?? [];
 $invoiceType = $invoiceType ?? 'pending';
+$invoiceShowTypeSelector = $invoiceShowTypeSelector ?? false;
 $invoicePagination = $invoicePagination ?? ['total' => count($invoiceRows), 'pagina' => 1, 'paginas' => 1, 'por_pagina' => 10];
 $invoiceSearch = (string) ($_GET['buscar'] ?? '');
 $invoiceDate = (string) ($_GET['fecha'] ?? '');
+$hoyMexico = new DateTimeImmutable('now', new DateTimeZone('America/Mexico_City'));
+$mesesCortos = [1 => 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+$invoiceDatePlaceholder = $hoyMexico->format('d') . '-' . $mesesCortos[(int) $hoyMexico->format('n')] . '-' . $hoyMexico->format('Y');
 $buildPageUrl = static function (int $page): string {
     $parameters = $_GET;
     $parameters['pagina'] = $page;
@@ -13,7 +17,7 @@ $buildPageUrl = static function (int $page): string {
 <div class="card">
     <div class="card-body border-bottom">
         <form method="get" class="row g-2 align-items-center">
-            <div class="col-lg-6">
+            <div class="<?= $invoiceShowTypeSelector ? 'col-lg-4' : 'col-lg-6' ?>">
                 <div class="search-bar">
                     <span><i data-lucide="search"></i></span>
                     <input name="buscar" value="<?= htmlspecialchars($invoiceSearch) ?>" type="search" class="form-control" placeholder="Buscar folio, cliente o RFC...">
@@ -21,12 +25,20 @@ $buildPageUrl = static function (int $page): string {
             </div>
             <!-- Input de fecha adaptado con formato visual amigable -->
             <div class="col-sm-5 col-lg-3">
-                <input name="fecha" id="filtro-fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="text" class="form-control" placeholder="18-sep-2026" aria-label="Filtrar por fecha">
+                <input name="fecha" id="filtro-fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="text" class="form-control" placeholder="<?= htmlspecialchars($invoiceDatePlaceholder) ?>" aria-label="Filtrar por fecha">
             </div>
+            <?php if ($invoiceShowTypeSelector): ?>
+            <div class="col-sm-7 col-lg-2">
+                <select name="tipo" class="form-select" aria-label="Tipo de documento" onchange="this.form.submit()">
+                    <option value="facturas"<?= $invoiceType === 'stamped' ? ' selected' : '' ?>>Facturas</option>
+                    <option value="prefacturas"<?= $invoiceType === 'prefactura' ? ' selected' : '' ?>>Prefacturas</option>
+                </select>
+            </div>
+            <?php endif; ?>
             <div class="col-sm-7 col-lg-3 text-sm-end">
                 <button class="btn btn-primary" type="submit"><i data-lucide="search" class="fs-16 me-1"></i>Buscar</button>
                 <?php if ($invoiceSearch !== '' || $invoiceDate !== ''): ?>
-                    <a href="?" class="btn btn-soft-secondary ms-1">Limpiar</a>
+                    <a href="<?= $invoiceShowTypeSelector && $invoiceType === 'prefactura' ? '?tipo=prefacturas' : '?' ?>" class="btn btn-soft-secondary ms-1">Limpiar</a>
                 <?php endif; ?>
             </div>
         </form>
@@ -38,7 +50,7 @@ $buildPageUrl = static function (int $page): string {
                     <th class="ps-3">Folio</th>
                     <th>Cliente</th>
                     <th>Fecha</th>
-                    <th><?= $invoiceType === 'stamped' ? 'UUID / Timbrado' : 'Vencimiento' ?></th>
+                    <th><?= $invoiceType === 'stamped' ? 'UUID / Timbrado' : ($invoiceType === 'prefactura' ? 'Detalle' : 'Vencimiento') ?></th>
                     <th>Total</th>
                     <th>Estado</th>
                     <th class="text-end pe-3">Acciones</th>
@@ -57,6 +69,11 @@ $buildPageUrl = static function (int $page): string {
                         <?php if ($invoiceType === 'stamped'): ?>
                             <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver PDF" aria-label="Ver PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
                             <a class="btn btn-sm btn-soft-primary" href="api/factura-documentos.php?id=<?= (int) $row['id'] ?>" title="Descargar documentos (XML y PDF)" aria-label="Descargar XML y PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="folder-down" class="fs-16"></i></a>
+                        <?php elseif ($invoiceType === 'prefactura'): ?>
+                            <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-invoice-type="prefactura" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver prefactura" aria-label="Ver prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
+                            <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar prefactura" aria-label="Editar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="square-pen" class="fs-16"></i></a>
+                            <a class="btn btn-sm btn-soft-primary" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar prefactura" aria-label="Descargar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="file-down" class="fs-16"></i></a>
+                            <button class="btn btn-sm btn-soft-success js-stamp-invoice" type="button" data-invoice-id="<?= (int) $row['id'] ?>" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Timbrar prefactura" aria-label="Timbrar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="badge-check" class="fs-16"></i></button>
                         <?php else: ?>
                             <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar"><i data-lucide="square-pen" class="fs-16"></i></a>
                             <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF de prueba"><i data-lucide="file-down" class="fs-16"></i></a>
@@ -65,12 +82,12 @@ $buildPageUrl = static function (int $page): string {
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($invoiceRows === []): ?><tr><td colspan="7" class="text-center py-5"><i data-lucide="file-search" class="text-muted mb-2" style="width:34px;height:34px"></i><p class="text-muted mb-0">No se encontraron facturas con estos filtros.</p></td></tr><?php endif; ?>
+            <?php if ($invoiceRows === []): ?><tr><td colspan="7" class="text-center py-5"><i data-lucide="file-search" class="text-muted mb-2" style="width:34px;height:34px"></i><p class="text-muted mb-0">No se encontraron <?= $invoiceType === 'prefactura' ? 'prefacturas' : 'facturas' ?> con estos filtros.</p></td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
     <div class="card-body border-top py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span class="text-muted fs-13">Mostrando <?= count($invoiceRows) ?> de <?= number_format((int) $invoicePagination['total']) ?> facturas</span>
+        <span class="text-muted fs-13">Mostrando <?= count($invoiceRows) ?> de <?= number_format((int) $invoicePagination['total']) ?> <?= $invoiceType === 'prefactura' ? 'prefacturas' : 'facturas' ?></span>
         <nav aria-label="Paginación de facturas"><ul class="pagination pagination-sm erp-pagination mb-0"><li class="page-item<?= $invoicePagination['pagina'] <= 1 ? ' disabled' : '' ?>"><a class="page-link" href="<?= htmlspecialchars($buildPageUrl(max(1, $invoicePagination['pagina'] - 1))) ?>">Anterior</a></li><li class="page-item active"><span class="page-link"><?= (int) $invoicePagination['pagina'] ?> / <?= (int) $invoicePagination['paginas'] ?></span></li><li class="page-item<?= $invoicePagination['pagina'] >= $invoicePagination['paginas'] ? ' disabled' : '' ?>"><a class="page-link" href="<?= htmlspecialchars($buildPageUrl(min($invoicePagination['paginas'], $invoicePagination['pagina'] + 1))) ?>">Siguiente</a></li></ul></nav>
     </div>
 </div>
@@ -82,9 +99,12 @@ $buildPageUrl = static function (int $page): string {
             flatpickr("#filtro-fecha", {
                 dateFormat: "Y-m-d",      // Formato que se envía por GET al servidor (ej. 2026-09-18)
                 altInput: true,           // Habilita un input visual alternativo
-                altFormat: "d-M-Y",       // Formato visual que verá el usuario (ej. 18-sep-2026)
+                altFormat: "d-M-Y",       // Formato visual que verá el usuario.
                 locale: "es",             // Idioma español para los meses
-                allowInput: true
+                allowInput: true,
+                onReady: function (_selectedDates, _dateStr, instance) {
+                    if (instance.altInput) instance.altInput.placeholder = instance.input.placeholder;
+                }
             });
         }
     });

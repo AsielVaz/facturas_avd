@@ -22,6 +22,8 @@ final class FacturaPdfException extends RuntimeException
 
 final class FacturaPdfDocumento extends FPDF
 {
+    public bool $esPrefactura = false;
+
     public function Header(): void
     {
     }
@@ -31,7 +33,10 @@ final class FacturaPdfDocumento extends FPDF
         $this->SetY(-1.0);
         $this->SetFont('Arial', 'I', 7);
         $this->SetTextColor(160, 164, 172);
-        $this->Cell(0, 0.4, FacturaPdfAdministrador::textoPdf('Este documento es una representación impresa de un CFDI'), 0, 0, 'C');
+        $leyenda = $this->esPrefactura
+            ? 'PREFACTURA - Documento sin timbrar y sin validez fiscal'
+            : 'Este documento es una representación impresa de un CFDI';
+        $this->Cell(0, 0.4, FacturaPdfAdministrador::textoPdf($leyenda), 0, 0, 'C');
     }
 
     public function bloque(float $x, float $y, float $ancho, float $alto, int $r, int $g, int $b): void
@@ -76,7 +81,8 @@ final class FacturaPdfAdministrador
 
         $this->prepararDirectorio($this->directorioPdf);
         $identificador = $datos['timbrada'] ? (string) $datos['uuid'] : (string) $facturaId;
-        $archivo = self::nombreBaseArchivo((string) $datos['emisor_nombre'], $identificador) . '.pdf';
+        $archivo = self::nombreBaseArchivo((string) $datos['emisor_nombre'], $identificador)
+            . ($datos['timbrada'] ? '' : '-PREFAC') . '.pdf';
         $ruta = rtrim($this->directorioPdf, '/\\') . DIRECTORY_SEPARATOR . $archivo;
         $this->guardarAtomico($ruta, $contenido);
 
@@ -131,9 +137,10 @@ final class FacturaPdfAdministrador
     private function crearDocumento(array $datos): FacturaPdfDocumento
     {
         $pdf = new FacturaPdfDocumento('P', 'cm', 'Letter');
+        $pdf->esPrefactura = !$datos['timbrada'];
         $pdf->SetMargins(self::MARGEN, self::MARGEN, self::MARGEN);
         $pdf->SetAutoPageBreak(true, 1.35);
-        $pdf->SetTitle(self::textoPdf('Factura ' . $datos['serie'] . '-' . $datos['folio']));
+        $pdf->SetTitle(self::textoPdf(($datos['timbrada'] ? 'Factura ' : 'Prefactura ') . $datos['serie'] . '-' . $datos['folio']));
         $pdf->SetAuthor(self::textoPdf((string) $datos['emisor_nombre']));
         $pdf->AddPage();
 
@@ -185,11 +192,11 @@ final class FacturaPdfAdministrador
         $pdf->SetXY($badgeX, 2.6);
         $pdf->SetFont('Arial', 'B', 10.5);
         $pdf->SetTextColor(255, 255, 255);
-        $pdf->Cell(6.2, 0.46, self::textoPdf('FACTURA #' . $datos['serie'] . '-' . $datos['folio']), 0, 2, 'C');
+        $pdf->Cell(6.2, 0.46, self::textoPdf(($datos['timbrada'] ? 'FACTURA #' : 'PREFACTURA #') . $datos['serie'] . '-' . $datos['folio']), 0, 2, 'C');
         $pdf->SetX($badgeX);
         $pdf->SetFont('Arial', '', 7.5);
         $pdf->SetTextColor(184, 191, 202);
-        $pdf->Cell(6.2, 0.34, 'CFDI v4.0 | ' . self::textoPdf((string) $datos['tipo_nombre']), 0, 0, 'C');
+        $pdf->Cell(6.2, 0.34, $datos['timbrada'] ? 'CFDI v4.0 | ' . self::textoPdf((string) $datos['tipo_nombre']) : 'BORRADOR | SIN TIMBRAR', 0, 0, 'C');
 
         $pdf->bloque(0, 4.1, self::ANCHO_PAGINA, 0.72, 31, 41, 55);
         if ($datos['timbrada']) {
@@ -213,7 +220,7 @@ final class FacturaPdfAdministrador
             $pdf->SetXY(self::MARGEN, 4.25);
             $pdf->SetFont('Arial', 'B', 9);
             $pdf->SetTextColor(255, 198, 94);
-            $pdf->Cell(self::ANCHO_CONTENIDO, 0.32, 'PRUEBA LOCAL - XML SIN TIMBRAR - SIN VALIDEZ FISCAL', 0, 0, 'C');
+            $pdf->Cell(self::ANCHO_CONTENIDO, 0.32, 'PREFACTURA - SIN TIMBRAR - SIN VALIDEZ FISCAL', 0, 0, 'C');
         }
     }
 

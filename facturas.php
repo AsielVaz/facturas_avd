@@ -1,6 +1,8 @@
 <?php
-$pageTitle = 'Facturas';
-$pageEyebrow = 'Facturas / CFDI emitidos';
+$tipoVista = ($_GET['tipo'] ?? '') === 'prefacturas' ? 'prefacturas' : 'facturas';
+$mostrandoPrefacturas = $tipoVista === 'prefacturas';
+$pageTitle = $mostrandoPrefacturas ? 'Prefacturas' : 'Facturas';
+$pageEyebrow = $mostrandoPrefacturas ? 'Facturas / Sin timbrar' : 'Facturas / CFDI emitidos';
 $activeModule = 'facturas';
 $activePage = 'facturas';
 $pageAction = '<a class="btn btn-primary" href="facturar.php"><i data-lucide="plus" class="fs-18 me-1"></i>Nueva factura</a>';
@@ -8,9 +10,10 @@ require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
 require_once __DIR__ . '/api/Autenticacion.php';
 Autenticacion::exigirPagina();
 $_SESSION['sat_status_csrf'] ??= bin2hex(random_bytes(32));
+$_SESSION['facturacion_csrf'] ??= bin2hex(random_bytes(32));
 $invoiceError = '';
 try {
-    $invoiceData = (new FacturaVistaAdministrador(new FacturaAdministrador(Conexion::obtener())))->cargar('timbradas', $_GET);
+    $invoiceData = (new FacturaVistaAdministrador(new FacturaAdministrador(Conexion::obtener())))->cargar($mostrandoPrefacturas ? 'prefacturas' : 'timbradas', $_GET);
     $invoiceRows = $invoiceData['filas'];
     $invoicePagination = $invoiceData['paginacion'];
     $invoiceSummary = $invoiceData['resumen'];
@@ -34,11 +37,14 @@ $cards = [
 foreach ($cards as $c) { [$kpiLabel,$kpiValue,$kpiTrend,$kpiIcon,$kpiColor,$extra,$kpiTrendColor]=$c; $kpiTrend="$kpiTrend · $extra"; require 'templates/kpi-card.php'; }
 ?> -->
 </div>
-<?php $invoiceType='stamped'; require 'templates/invoice-table.php'; ?>
+<?php $invoiceType = $mostrandoPrefacturas ? 'prefactura' : 'stamped'; $invoiceShowTypeSelector = true; require 'templates/invoice-table.php'; ?>
 <script>
 window.satStatusConfig = <?= json_encode([
     'endpoint' => 'api/factura-estados-sat.php',
     'csrf' => (string) $_SESSION['sat_status_csrf'],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+window.prefacturasConfig = <?= json_encode([
+    'csrf' => (string) $_SESSION['facturacion_csrf'],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 <div class="modal fade" id="invoicePdfModal" tabindex="-1" aria-labelledby="invoicePdfModalTitle" aria-hidden="true">
@@ -85,7 +91,7 @@ $pageScripts = <<<'HTML'
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
     document.querySelectorAll('.js-view-invoice').forEach(button => {
         button.addEventListener('click', () => {
-            modalTitle.textContent = 'Factura ' + (button.dataset.invoiceFolio || '');
+            modalTitle.textContent = (button.dataset.invoiceType === 'prefactura' ? 'Prefactura ' : 'Factura ') + (button.dataset.invoiceFolio || '');
             showLoader();
             pdfFrame.src = button.dataset.pdfUrl || 'about:blank';
             modal.show();
@@ -97,6 +103,44 @@ $pageScripts = <<<'HTML'
     modalElement.addEventListener('hidden.bs.modal', () => {
         pdfFrame.src = 'about:blank';
         hideLoader();
+    });
+})();
+
+(() => {
+    const config = window.prefacturasConfig;
+    if (!config) return;
+    document.querySelectorAll('.js-stamp-invoice').forEach(button => {
+        button.addEventListener('click', async () => {
+            if (button.disabled) return;
+            const folio = button.dataset.invoiceFolio || '';
+            if (!window.confirm('¿Deseas timbrar fiscalmente la prefactura ' + folio + '? Esta acción la enviará al PAC.')) return;
+            const original = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-label="Timbrando"></span>';
+            try {
+                const response = await fetch('api/facturas.php?accion=timbrar', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                    body: JSON.stringify({csrf: config.csrf, factura_id: Number(button.dataset.invoiceId)}),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) {
+                    const details = Array.isArray(data.errores) && data.errores.length ? '\n' + data.errores.join('\n') : '';
+                    throw new Error((data.error || 'No fue posible timbrar la prefactura.') + details);
+                }
+                window.location.href = 'facturas.php';
+            } catch (error) {
+                if (error instanceof TypeError) {
+                    window.alert('No se pudo confirmar el resultado del timbrado. Revisa Facturas antes de volver a intentarlo.');
+                    return;
+                }
+                window.alert(error.message || 'No fue posible timbrar la prefactura.');
+                button.disabled = false;
+                button.innerHTML = original;
+                if (window.lucide) window.lucide.createIcons();
+            }
+        });
     });
 })();
 

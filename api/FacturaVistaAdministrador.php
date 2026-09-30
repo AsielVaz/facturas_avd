@@ -16,8 +16,9 @@ final class FacturaVistaAdministrador
      */
     public function cargar(string $tipo, array $filtros): array
     {
+        $tipoConsulta = $tipo === 'prefacturas' ? 'pendientes' : $tipo;
         $resultado = $this->facturas->listar(
-            $tipo,
+            $tipoConsulta,
             max(1, (int) ($filtros['pagina'] ?? 1)),
             10,
             trim((string) ($filtros['buscar'] ?? '')),
@@ -32,7 +33,7 @@ final class FacturaVistaAdministrador
                 'paginas' => $resultado['paginas'],
                 'por_pagina' => $resultado['por_pagina'],
             ],
-            'resumen' => $this->facturas->obtenerResumen($tipo),
+            'resumen' => $this->facturas->obtenerResumen($tipoConsulta),
         ];
     }
 
@@ -49,16 +50,16 @@ final class FacturaVistaAdministrador
         $fechaTimbrado = !empty($fila['fecha_timbrado']) ? new DateTimeImmutable((string) $fila['fecha_timbrado']) : null;
         $uuid = trim((string) ($fila['uuid'] ?? ''));
         $moneda = (string) ($fila['moneda'] ?? 'MXN');
-        $formatoFecha = $tipo === 'timbradas' ? 'd-M.Y' : 'd/m/Y';
+        $formatoFecha = in_array($tipo, ['timbradas', 'prefacturas'], true) ? 'd-M.Y' : 'd/m/Y';
 
         if ($tipo === 'timbradas') {
             $estado = $esCancelada ? 'Cancelada' : 'Vigente';
             $color = $esCancelada ? 'danger' : 'success';
             $detalle = ($fechaTimbrado?->format($formatoFecha) ?? 'Sin fecha') . (!empty($fila['hora_timbrado']) ? ' · ' . substr((string) $fila['hora_timbrado'], 0, 5) : '');
         } else {
-            $estado = $esError ? 'Error' : 'Pendiente';
+            $estado = $esError ? 'Error' : ($tipo === 'prefacturas' ? 'Prefactura' : 'Pendiente');
             $color = $esError ? 'danger' : 'warning';
-            $detalle = $statusError !== '' ? mb_strimwidth($statusError, 0, 42, '…', 'UTF-8') : 'Lista para timbrar';
+            $detalle = $statusError !== '' ? mb_strimwidth($statusError, 0, 42, '…', 'UTF-8') : ($tipo === 'prefacturas' ? 'Sin timbrar · sin validez fiscal' : 'Lista para timbrar');
         }
 
         return [

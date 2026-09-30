@@ -104,7 +104,7 @@ try {
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $accion = strtolower(trim((string) ($_GET['accion'] ?? '')));
-        if (!in_array($accion, ['guardar', 'timbrar'], true)) {
+        if (!in_array($accion, ['guardar', 'guardar_prefactura', 'timbrar'], true)) {
             http_response_code(405);
             echo json_encode(['ok' => false, 'error' => 'La operación solicitada no existe.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             exit;
@@ -122,12 +122,6 @@ try {
             echo json_encode(['ok' => false, 'error' => 'La sesión del formulario expiró. Recarga la página.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             exit;
         }
-
-        $servicioTimbrado = new CfdiTimbradoServicio(
-            $conexion,
-            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma',
-            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'firmados'
-        );
         $usuarioId = isset($_SESSION['usuario_id']) && (int) $_SESSION['usuario_id'] > 0
             ? (int) $_SESSION['usuario_id']
             : null;
@@ -138,7 +132,11 @@ try {
                 // Se regenera antes de cada intento para usar la hora fiscal local actual
                 // y evitar enviar al PAC un XML antiguo o creado con otra zona horaria.
                 (new FacturaPendienteAdministrador($conexion))->generarXml($facturaId);
-                $timbrado = $servicioTimbrado->timbrar($facturaId, SesionEmpresa::empresaActual(), $usuarioId);
+                $timbrado = (new CfdiTimbradoServicio(
+                    $conexion,
+                    dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma',
+                    dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'firmados'
+                ))->timbrar($facturaId, SesionEmpresa::empresaActual(), $usuarioId);
                 echo json_encode([
                     'ok' => true,
                     'mensaje' => 'La factura fue timbrada correctamente.',
@@ -162,6 +160,21 @@ try {
             exit;
         }
         $factura = (new FacturaCreacionAdministrador($conexion))->guardarFactura($datos);
+        if ($accion === 'guardar_prefactura') {
+            $_SESSION['facturacion_csrf'] = bin2hex(random_bytes(32));
+            echo json_encode([
+                'ok' => true,
+                'mensaje' => 'La prefactura se guardó como pendiente, sin enviarse a timbrar.',
+                'factura' => $factura,
+                'pdf_url' => 'api/factura-pdf.php?id=' . (int) $factura['id'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            exit;
+        }
+        $servicioTimbrado = new CfdiTimbradoServicio(
+            $conexion,
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'sinfirma',
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'firmados'
+        );
         try {
             $timbrado = $servicioTimbrado->timbrar(
                 (int) $factura['id'],
