@@ -113,7 +113,16 @@ $pageScripts = <<<'HTML'
         button.addEventListener('click', async () => {
             if (button.disabled) return;
             const folio = button.dataset.invoiceFolio || '';
-            if (!window.confirm('¿Deseas timbrar fiscalmente la prefactura ' + folio + '? Esta acción la enviará al PAC.')) return;
+            const confirmacion = await Swal.fire({
+                icon: 'question',
+                title: 'Timbrar prefactura',
+                text: '¿Deseas timbrar fiscalmente la prefactura ' + folio + '? Se enviará al PAC.',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, timbrar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#16a34a',
+            });
+            if (!confirmacion.isConfirmed) return;
             const original = button.innerHTML;
             button.disabled = true;
             button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-label="Timbrando"></span>';
@@ -129,13 +138,32 @@ $pageScripts = <<<'HTML'
                     const details = Array.isArray(data.errores) && data.errores.length ? '\n' + data.errores.join('\n') : '';
                     throw new Error((data.error || 'No fue posible timbrar la prefactura.') + details);
                 }
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Prefactura timbrada',
+                    text: 'La prefactura ' + folio + ' se timbró correctamente. Folio fiscal: ' + (data.factura?.uuid || 'disponible en Facturas'),
+                    confirmButtonText: 'Ver facturas',
+                    confirmButtonColor: '#16a34a',
+                });
                 window.location.href = 'facturas.php';
             } catch (error) {
-                if (error instanceof TypeError) {
-                    window.alert('No se pudo confirmar el resultado del timbrado. Revisa Facturas antes de volver a intentarlo.');
+                if (error instanceof TypeError || error instanceof SyntaxError) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Resultado sin confirmar',
+                        text: 'No se pudo confirmar el resultado del timbrado. Revisa Facturas antes de volver a intentarlo para evitar un envío duplicado.',
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: '#d97706',
+                    });
                     return;
                 }
-                window.alert(error.message || 'No fue posible timbrar la prefactura.');
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo timbrar',
+                    text: error.message || 'No fue posible timbrar la prefactura.',
+                    confirmButtonText: 'Aceptar',
+                    confirmButtonColor: '#dc2626',
+                });
                 button.disabled = false;
                 button.innerHTML = original;
                 if (window.lucide) window.lucide.createIcons();
