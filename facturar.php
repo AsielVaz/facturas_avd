@@ -254,7 +254,14 @@ require 'templates/page-start.php';
         <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
             <div class="modal-header"><div><h5 class="modal-title">Vista previa CFDI 4.0</h5><p class="text-muted mb-0 fs-13"><?= $modoEdicion ? 'Cambios guardados en la factura pendiente; aún no tiene validez fiscal.' : 'Documento no persistido y sin validez fiscal.' ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body" id="previewContent"></div>
-            <div class="modal-footer"><button id="savePrefacturaButton" type="button" class="btn btn-outline-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled><i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura</button><button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled>Guardar y timbrar factura</button><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>
+            <div class="modal-footer">
+                <button id="savePrefacturaButton" type="button" class="btn btn-outline-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled><i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura</button>
+                <?php if ($modoEdicion): ?>
+                    <button id="downloadEditedPrefacturaButton" type="button" class="btn btn-outline-primary" disabled><i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura</button>
+                <?php endif; ?>
+                <button id="saveInvoiceButton" type="button" class="btn btn-primary<?= $modoEdicion ? ' d-none' : '' ?>" disabled>Guardar y timbrar factura</button>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+            </div>
         </div></div>
     </div>
     <div class="modal fade" id="prefacturaPdfModal" tabindex="-1" aria-labelledby="prefacturaPdfModalTitle" aria-hidden="true">
@@ -312,6 +319,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const validateButton = document.getElementById('validateButton');
     const saveInvoiceButton = document.getElementById('saveInvoiceButton');
     const savePrefacturaButton = document.getElementById('savePrefacturaButton');
+    const downloadEditedPrefacturaButton = document.getElementById('downloadEditedPrefacturaButton');
     const previewContent = document.getElementById('previewContent');
     const previewModalElement = document.getElementById('previewModal');
     const prefacturaPdfModalElement = document.getElementById('prefacturaPdfModal');
@@ -341,6 +349,35 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         if (prefacturaPdfUrl) URL.revokeObjectURL(prefacturaPdfUrl);
         window.location.reload();
     });
+
+    async function downloadAndShowPrefactura(pdfUrl, folio) {
+        const pdfResponse = await fetch(pdfUrl, {credentials: 'same-origin'});
+        if (!pdfResponse.ok || !(pdfResponse.headers.get('Content-Type') || '').toLowerCase().includes('application/pdf')) {
+            throw new Error('La prefactura se guardó, pero no fue posible abrir su PDF. Puedes descargarlo de nuevo desde Prefacturas.');
+        }
+        const pdfBlob = await pdfResponse.blob();
+        if (pdfBlob.size === 0) {
+            throw new Error('La prefactura se guardó, pero el PDF descargado está vacío. Puedes volver a descargarlo desde Prefacturas.');
+        }
+        prefacturaPdfUrl = URL.createObjectURL(pdfBlob);
+        const nombreArchivo = /filename="?([^";]+)"?/i.exec(pdfResponse.headers.get('Content-Disposition') || '')?.[1]
+            || 'Prefactura-' + folio + '.pdf';
+        const download = document.createElement('a');
+        download.href = prefacturaPdfUrl;
+        download.download = nombreArchivo;
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        prefacturaPdfTitle.textContent = 'Prefactura ' + folio;
+        prefacturaPdfLoader.classList.remove('d-none');
+        prefacturaPdfLoader.classList.add('d-flex');
+        prefacturaPdfFrame.style.visibility = 'hidden';
+        previewModalElement.addEventListener('hidden.bs.modal', () => {
+            prefacturaPdfFrame.src = prefacturaPdfUrl;
+            bootstrap.Modal.getOrCreateInstance(prefacturaPdfModalElement).show();
+        }, {once: true});
+        bootstrap.Modal.getOrCreateInstance(previewModalElement).hide();
+    }
 
     function money(value) {
         const currency = selectedCode(currencySelect) || 'MXN';
@@ -913,35 +950,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             }
             validatedPayload = null;
             savedFactura = data.factura;
-            const pdfResponse = await fetch(data.pdf_url, {credentials: 'same-origin'});
-            if (!pdfResponse.ok || !(pdfResponse.headers.get('Content-Type') || '').toLowerCase().includes('application/pdf')) {
-                const error = new Error('La prefactura se guardó, pero no fue posible abrir su PDF. Puedes descargarlo de nuevo desde Prefacturas.');
-                error.saved = true;
-                error.invoice = data.factura;
-                throw error;
-            }
-            const pdfBlob = await pdfResponse.blob();
-            if (pdfBlob.size === 0) {
-                throw new Error('La prefactura se guardó, pero el PDF descargado está vacío. Puedes volver a descargarlo desde Prefacturas.');
-            }
-            prefacturaPdfUrl = URL.createObjectURL(pdfBlob);
-            const nombreArchivo = /filename="?([^";]+)"?/i.exec(pdfResponse.headers.get('Content-Disposition') || '')?.[1]
-                || 'Prefactura-' + data.factura.serie + '-' + data.factura.folio + '.pdf';
-            const download = document.createElement('a');
-            download.href = prefacturaPdfUrl;
-            download.download = nombreArchivo;
-            document.body.appendChild(download);
-            download.click();
-            download.remove();
-            prefacturaPdfTitle.textContent = 'Prefactura ' + data.factura.serie + '-' + data.factura.folio;
-            prefacturaPdfLoader.classList.remove('d-none');
-            prefacturaPdfLoader.classList.add('d-flex');
-            prefacturaPdfFrame.style.visibility = 'hidden';
-            previewModalElement.addEventListener('hidden.bs.modal', () => {
-                prefacturaPdfFrame.src = prefacturaPdfUrl;
-                bootstrap.Modal.getOrCreateInstance(prefacturaPdfModalElement).show();
-            }, {once: true});
-            bootstrap.Modal.getOrCreateInstance(previewModalElement).hide();
+            await downloadAndShowPrefactura(data.pdf_url, data.factura.serie + '-' + data.factura.folio);
         } catch (error) {
             if (savedFactura) {
                 error.saved = true;
@@ -968,6 +977,26 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             savePrefacturaButton.disabled = false;
             saveInvoiceButton.disabled = false;
             savePrefacturaButton.innerHTML = '<i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura';
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+    downloadEditedPrefacturaButton?.addEventListener('click', async () => {
+        if (!editing || downloadEditedPrefacturaButton.disabled) return;
+        downloadEditedPrefacturaButton.disabled = true;
+        downloadEditedPrefacturaButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Descargando prefactura...';
+        try {
+            await downloadAndShowPrefactura('api/factura-pdf.php?id=' + encodeURIComponent(editing.id), editing.folio);
+        } catch (error) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'No se pudo descargar la prefactura',
+                text: error.message || 'Los cambios se guardaron, pero no fue posible obtener el PDF. Puedes descargarlo desde Prefacturas.',
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#dc2626',
+            });
+        } finally {
+            downloadEditedPrefacturaButton.disabled = false;
+            downloadEditedPrefacturaButton.innerHTML = '<i data-lucide="download" class="fs-17 me-1"></i>Guardar y descargar prefactura';
             if (window.lucide) window.lucide.createIcons();
         }
     });
@@ -1052,6 +1081,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             return;
         }
         savingEdit = Boolean(editing);
+        if (editing) downloadEditedPrefacturaButton.disabled = true;
         validateButton.disabled = true;
         validateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (editing ? 'Guardando...' : 'Validando...');
         try {
@@ -1069,6 +1099,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             }
             if (editing && data.factura?.huella) editing.huella = data.factura.huella;
             if (editing) originalEditSnapshot = editSnapshot(invoicePayload);
+            if (editing) downloadEditedPrefacturaButton.disabled = false;
             validatedPayload = !editing && data.resultado.valido ? invoicePayload : null;
             showMessages(data.resultado.errores, []);
             renderPreview(data.resultado);
