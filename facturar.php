@@ -237,7 +237,7 @@ require 'templates/page-start.php';
                         <div class="d-flex justify-content-between mb-3"><span class="text-muted">IVA retenido</span><strong id="summaryWithholdingVat" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="border-top pt-3 d-flex justify-content-between align-items-center"><span class="fw-semibold">Total</span><span id="summaryTotal" class="fs-3 fw-bold text-primary invoice-money">$0.00</span></div>
                         <div class="alert alert-warning fs-13 mt-3 mb-3"><?= $modoEdicion ? 'Guardar actualizará únicamente esta factura pendiente.' : 'La validación no guardará la factura.' ?></div>
-                        <button id="validateButton" type="submit" class="btn btn-primary w-100" <?= empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
+                        <button id="validateButton" type="submit" class="btn btn-primary w-100" data-emisor-completo="<?= !empty($emisor['completo']) ? '1' : '0' ?>" <?= $modoEdicion || empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
                     </div>
                 </div>
             </div>
@@ -318,6 +318,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     let prefacturaPdfUrl = null;
     let receiverPersonType = '';
     let restoringEditingRetentions = Boolean(editing);
+    let originalEditSnapshot = null;
+    let savingEdit = false;
 
     prefacturaPdfFrame.addEventListener('load', () => {
         prefacturaPdfLoader.classList.remove('d-flex');
@@ -725,6 +727,17 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         };
     }
 
+    function editSnapshot(data = payload()) {
+        const {csrf, huella, ...fields} = data;
+        return JSON.stringify(fields);
+    }
+
+    function updateSaveAvailability() {
+        if (!editing || originalEditSnapshot === null) return;
+        validateButton.disabled = validateButton.dataset.emisorCompleto !== '1'
+            || savingEdit || editSnapshot() === originalEditSnapshot;
+    }
+
     function renderPreview(result) {
         const status = result.valido
             ? '<div class="alert alert-success"><strong>' + (result.persistido ? 'Los cambios fueron guardados en la factura pendiente.' : 'La estructura pasó las validaciones locales. No fue guardada ni timbrada.') + '</strong></div>'
@@ -744,13 +757,18 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     }
 
     clientSelect.addEventListener('change', loadProfiles);
+    form.addEventListener('input', updateSaveAvailability);
+    form.addEventListener('change', updateSaveAvailability);
     profileSelect.addEventListener('change', showProfile);
     currencySelect.addEventListener('change', function () {
         const isMxn = selectedCode(currencySelect) === 'MXN';
         exchangeInput.readOnly = isMxn;
         if (isMxn) exchangeInput.value = '1';
     });
-    document.getElementById('addItemButton').addEventListener('click', () => addItem(null, true));
+    document.getElementById('addItemButton').addEventListener('click', () => {
+        addItem(null, true);
+        updateSaveAvailability();
+    });
     itemsBody.addEventListener('change', event => {
         const row = event.target.closest('tr');
         if (event.target.classList.contains('item-concept')) conceptChanged(row); else calculate();
@@ -781,6 +799,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         }
         applyInvoiceType();
     });
+    invoiceTypeSwitch.addEventListener('change', updateSaveAvailability);
     saveInvoiceButton?.addEventListener('click', async () => {
         if (!validatedPayload || saveInvoiceButton.disabled) return;
         previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
@@ -945,9 +964,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         button.closest('tr').remove();
         emptyItems.classList.toggle('d-none', itemsBody.rows.length > 0);
         calculate();
+        updateSaveAvailability();
     });
     form.addEventListener('submit', async event => {
         event.preventDefault();
+        if (editing && (savingEdit || originalEditSnapshot === null || editSnapshot() === originalEditSnapshot)) return;
         messages.innerHTML = '';
         const invalidPrice = [...itemsBody.rows].map(row => row.querySelector('.item-price')).find(input =>
             !/^\d+(?:\.\d{1,6})?$/.test(input.value.replaceAll(',', ''))
@@ -957,6 +978,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             invalidPrice.focus();
             return;
         }
+        savingEdit = Boolean(editing);
         validateButton.disabled = true;
         validateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (editing ? 'Guardando...' : 'Validando...');
         try {
@@ -973,13 +995,16 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 throw error;
             }
             if (editing && data.factura?.huella) editing.huella = data.factura.huella;
+            if (editing) originalEditSnapshot = editSnapshot(invoicePayload);
             validatedPayload = !editing && data.resultado.valido ? invoicePayload : null;
             showMessages(data.resultado.errores, []);
             renderPreview(data.resultado);
         } catch (error) {
             showMessages(error.details?.length ? error.details : [error.message], []);
         } finally {
-            validateButton.disabled = false;
+            savingEdit = false;
+            if (editing) updateSaveAvailability();
+            else validateButton.disabled = false;
             validateButton.innerHTML = editing
                 ? '<i data-lucide="save" class="fs-17 me-1"></i>Guardar cambios'
                 : '<i data-lucide="file-check-2" class="fs-17 me-1"></i>Validar y previsualizar';
@@ -995,6 +1020,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         restoringEditingRetentions = false;
         editing.partidas.forEach(partida => addItem(partida));
         if (!editing.partidas.length) addItem();
+        originalEditSnapshot = editSnapshot();
+        updateSaveAvailability();
     } else {
         addItem();
     }
