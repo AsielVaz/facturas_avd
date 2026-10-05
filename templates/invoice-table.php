@@ -13,6 +13,13 @@ $buildPageUrl = static function (int $page): string {
     $parameters['pagina'] = $page;
     return '?' . http_build_query($parameters);
 };
+$buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, $invoiceDate, $invoicePagination): string {
+    $parameters = ['id' => $invoiceId, 'volver_tipo' => 'prefacturas'];
+    if ($invoiceSearch !== '') $parameters['volver_buscar'] = $invoiceSearch;
+    if ($invoiceDate !== '') $parameters['volver_fecha'] = $invoiceDate;
+    if ((int) $invoicePagination['pagina'] > 1) $parameters['volver_pagina'] = (int) $invoicePagination['pagina'];
+    return 'facturar.php?' . http_build_query($parameters);
+};
 ?>
 <div class="card">
     <div class="card-body border-bottom">
@@ -71,7 +78,7 @@ $buildPageUrl = static function (int $page): string {
                             <a class="btn btn-sm btn-soft-primary" href="api/factura-documentos.php?id=<?= (int) $row['id'] ?>" title="Descargar documentos (XML y PDF)" aria-label="Descargar XML y PDF de <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="folder-down" class="fs-16"></i></a>
                         <?php elseif ($invoiceType === 'prefactura'): ?>
                             <button class="btn btn-sm btn-soft-secondary js-view-invoice" type="button" data-invoice-type="prefactura" data-pdf-url="api/factura-pdf.php?id=<?= (int) $row['id'] ?>&amp;vista=1" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Ver prefactura" aria-label="Ver prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="eye" class="fs-16"></i></button>
-                            <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar prefactura" aria-label="Editar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="square-pen" class="fs-16"></i></a>
+                            <a class="btn btn-sm btn-soft-primary" href="<?= htmlspecialchars($buildPrefacturaEditUrl((int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Editar prefactura" aria-label="Editar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="square-pen" class="fs-16"></i></a>
                             <a class="btn btn-sm btn-soft-primary" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar prefactura" aria-label="Descargar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="file-down" class="fs-16"></i></a>
                             <button class="btn btn-sm btn-soft-success js-stamp-invoice" type="button" data-invoice-id="<?= (int) $row['id'] ?>" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Timbrar prefactura" aria-label="Timbrar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="badge-check" class="fs-16"></i></button>
                         <?php else: ?>

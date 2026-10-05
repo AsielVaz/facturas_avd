@@ -56,6 +56,24 @@ $pageTitle = $modoEdicion ? 'Editar factura pendiente' : 'Preparar factura CFDI 
 $pageEyebrow = $modoEdicion ? 'Facturas / Editar pendiente' : 'Facturas / Nueva factura';
 $activeModule = 'facturas';
 $activePage = 'facturar';
+$volverFiltros = [];
+if ($modoEdicion && ($_GET['volver_tipo'] ?? '') === 'prefacturas') {
+    $volverFiltros['tipo'] = 'prefacturas';
+    $volverFecha = $_GET['volver_fecha'] ?? '';
+    if (is_string($volverFecha) && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $volverFecha, $coincidenciaFecha)
+        && checkdate((int) $coincidenciaFecha[2], (int) $coincidenciaFecha[3], (int) $coincidenciaFecha[1])) {
+        $volverFiltros['fecha'] = $volverFecha;
+    }
+    $volverBuscar = $_GET['volver_buscar'] ?? '';
+    if (is_string($volverBuscar) && trim($volverBuscar) !== '') {
+        $volverFiltros['buscar'] = trim($volverBuscar);
+    }
+    $volverPagina = filter_var($_GET['volver_pagina'] ?? null, FILTER_VALIDATE_INT);
+    if ($volverPagina !== false && $volverPagina > 1) {
+        $volverFiltros['pagina'] = $volverPagina;
+    }
+}
+$volverUrl = 'facturas.php' . ($volverFiltros ? '?' . http_build_query($volverFiltros) : '');
 $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-end gap-2">'
     . '<div class="invoice-type-switcher d-flex align-items-center gap-3 border rounded-3 px-3 py-2 bg-body-tertiary">'
     . '<i data-lucide="sliders-horizontal" class="text-primary flex-shrink-0"></i>'
@@ -64,7 +82,7 @@ $pageAction = '<div class="d-flex flex-wrap align-items-center justify-content-e
     . ($facturaCompletaInicial ? 'checked' : '') . '><label id="invoiceTypeLabel" class="form-check-label fw-semibold" for="invoiceTypeSwitch">'
     . ($facturaCompletaInicial ? 'Factura avanzada' : 'Factura sencilla') . '</label></div>'
     . '<small id="invoiceTypeHint" class="d-block text-muted"></small></div></div>'
-    . '<a href="facturas.php" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a inicio</a></div>';
+    . '<a href="' . htmlspecialchars($volverUrl, ENT_QUOTES, 'UTF-8') . '" class="btn btn-soft-secondary"><i data-lucide="arrow-left" class="fs-17 me-1"></i>Volver a inicio</a></div>';
 require 'templates/page-start.php';
 ?>
 
