@@ -237,7 +237,13 @@ require 'templates/page-start.php';
                         <div class="d-flex justify-content-between mb-3"><span class="text-muted">IVA retenido</span><strong id="summaryWithholdingVat" class="invoice-money text-danger">-$0.00</strong></div>
                         <div class="border-top pt-3 d-flex justify-content-between align-items-center"><span class="fw-semibold">Total</span><span id="summaryTotal" class="fs-3 fw-bold text-primary invoice-money">$0.00</span></div>
                         <div class="alert alert-warning fs-13 mt-3 mb-3"><?= $modoEdicion ? 'Guardar actualizará únicamente esta factura pendiente.' : 'La validación no guardará la factura.' ?></div>
-                        <button id="validateButton" type="submit" class="btn btn-primary w-100" data-emisor-completo="<?= !empty($emisor['completo']) ? '1' : '0' ?>" <?= $modoEdicion || empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
+                        <div class="d-flex gap-2">
+                            <button id="validateButton" type="submit" class="btn btn-primary flex-fill" data-emisor-completo="<?= !empty($emisor['completo']) ? '1' : '0' ?>" <?= $modoEdicion || empty($emisor['completo']) ? 'disabled' : '' ?>><i data-lucide="<?= $modoEdicion ? 'save' : 'file-check-2' ?>" class="fs-17 me-1"></i><?= $modoEdicion ? 'Guardar cambios' : 'Validar y previsualizar' ?></button>
+                            <?php if ($modoEdicion): ?>
+                                <button id="stampPendingButton" type="button" class="btn btn-outline-primary flex-fill" disabled><i data-lucide="badge-check" class="fs-17 me-1"></i>Timbrar</button>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($modoEdicion): ?><small id="stampPendingHint" class="text-muted d-none mt-2">Guarda los cambios antes de timbrar.</small><?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -275,6 +281,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     'use strict';
     const config = window.facturacionConfig;
     const form = document.getElementById('invoiceForm');
+    const stampPendingButton = document.getElementById('stampPendingButton');
+    const stampPendingHint = document.getElementById('stampPendingHint');
     const clientSelect = document.getElementById('clientSelect');
     const profileSelect = document.getElementById('profileSelect');
     const receiverSummary = document.getElementById('receiverSummary');
@@ -320,6 +328,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     let restoringEditingRetentions = Boolean(editing);
     let originalEditSnapshot = null;
     let savingEdit = false;
+    let stampingEdit = false;
+    let stampResultUncertain = false;
 
     prefacturaPdfFrame.addEventListener('load', () => {
         prefacturaPdfLoader.classList.remove('d-flex');
@@ -734,8 +744,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function updateSaveAvailability() {
         if (!editing || originalEditSnapshot === null) return;
-        validateButton.disabled = validateButton.dataset.emisorCompleto !== '1'
-            || savingEdit || editSnapshot() === originalEditSnapshot;
+        const dirty = editSnapshot() !== originalEditSnapshot;
+        const unavailable = validateButton.dataset.emisorCompleto !== '1' || savingEdit || stampingEdit;
+        validateButton.disabled = unavailable || !dirty;
+        stampPendingButton.disabled = unavailable || dirty || stampResultUncertain;
+        stampPendingHint.classList.toggle('d-none', !dirty);
     }
 
     function renderPreview(result) {
@@ -966,9 +979,69 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         calculate();
         updateSaveAvailability();
     });
+    stampPendingButton?.addEventListener('click', async () => {
+        if (!editing || stampPendingButton.disabled || editSnapshot() !== originalEditSnapshot) return;
+        const folio = editing.folio || ('#' + editing.id);
+        const confirmation = await Swal.fire({
+            icon: 'question',
+            title: 'Timbrar prefactura',
+            text: '¿Deseas timbrar fiscalmente la prefactura ' + folio + '? Se enviará al PAC.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, timbrar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#16a34a',
+        });
+        if (!confirmation.isConfirmed || savingEdit || stampingEdit || stampResultUncertain
+            || editSnapshot() !== originalEditSnapshot) {
+            updateSaveAvailability();
+            return;
+        }
+        stampingEdit = true;
+        updateSaveAvailability();
+        stampPendingButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-label="Timbrando"></span>Timbrando...';
+        try {
+            const response = await fetch('api/facturas.php?accion=timbrar', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({csrf: config.csrf, factura_id: Number(editing.id)}),
+            });
+            const data = await readApiJson(response, 'timbrar la prefactura');
+            if (!response.ok || !data.ok) {
+                const error = new Error(data.error || 'No fue posible timbrar la prefactura.');
+                error.details = data.errores || [];
+                throw error;
+            }
+            await Swal.fire({
+                icon: 'success',
+                title: 'Prefactura timbrada',
+                text: 'La prefactura ' + folio + ' se timbró correctamente. Folio fiscal: ' + (data.factura?.uuid || 'disponible en Facturas'),
+                confirmButtonText: 'Ver facturas',
+                confirmButtonColor: '#16a34a',
+            });
+            window.location.href = 'facturas.php';
+        } catch (error) {
+            const uncertain = error instanceof TypeError || error.stage === 'respuesta del servidor';
+            if (uncertain) stampResultUncertain = true;
+            await Swal.fire({
+                icon: uncertain ? 'warning' : 'error',
+                title: uncertain ? 'Resultado sin confirmar' : 'No se pudo timbrar',
+                text: uncertain
+                    ? 'No se pudo confirmar el resultado del timbrado. Revisa Facturas antes de volver a intentarlo para evitar un envío duplicado.'
+                    : [error.message, ...(Array.isArray(error.details) ? error.details : [])].filter(Boolean).join('\n'),
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: uncertain ? '#d97706' : '#dc2626',
+            });
+        } finally {
+            stampingEdit = false;
+            stampPendingButton.innerHTML = '<i data-lucide="badge-check" class="fs-17 me-1"></i>Timbrar';
+            updateSaveAvailability();
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
     form.addEventListener('submit', async event => {
         event.preventDefault();
-        if (editing && (savingEdit || originalEditSnapshot === null || editSnapshot() === originalEditSnapshot)) return;
+        if (editing && (savingEdit || stampingEdit || originalEditSnapshot === null || editSnapshot() === originalEditSnapshot)) return;
         messages.innerHTML = '';
         const invalidPrice = [...itemsBody.rows].map(row => row.querySelector('.item-price')).find(input =>
             !/^\d+(?:\.\d{1,6})?$/.test(input.value.replaceAll(',', ''))
