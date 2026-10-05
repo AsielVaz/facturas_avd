@@ -335,6 +335,36 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         return new Intl.NumberFormat('es-MX', {style: 'currency', currency: currency}).format(Number(value) || 0);
     }
 
+    function formatUnitPrice(value) {
+        const raw = String(value ?? '').replaceAll(',', '');
+        if (!/^\d*(?:\.\d{0,6})?$/.test(raw)) return null;
+        const [integer, decimals] = raw.split('.');
+        const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return decimals === undefined ? grouped : grouped + '.' + decimals;
+    }
+
+    function updateUnitPriceInput(input) {
+        const digitsBeforeCursor = input.value.slice(0, input.selectionStart ?? input.value.length).replaceAll(',', '').length;
+        const formatted = formatUnitPrice(input.value);
+        if (formatted === null) {
+            input.value = input.dataset.lastValid || '0';
+            input.setSelectionRange(input.value.length, input.value.length);
+            return;
+        }
+        input.value = formatted;
+        input.dataset.lastValid = formatted;
+        let position = 0, characters = 0;
+        while (position < formatted.length && characters < digitsBeforeCursor) {
+            if (formatted[position] !== ',') characters++;
+            position++;
+        }
+        input.setSelectionRange(position, position);
+    }
+
+    function unitPriceValue(input) {
+        return Number(input.value.replaceAll(',', '')) || 0;
+    }
+
     function escapeHtml(value) {
         const node = document.createElement('div');
         node.textContent = String(value ?? '');
@@ -569,7 +599,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         row.dataset.detailId = String(initial?.detalle_id || 0);
         row.innerHTML = '<td class="ps-3"><div class="concept-select-slot"></div><textarea class="form-control form-control-sm item-description mt-1" rows="2" maxlength="1000" placeholder="Descripción del concepto"></textarea><small class="item-help text-muted"></small></td>' +
             '<td><input type="number" class="form-control form-control-sm item-quantity" min="1" step="1" inputmode="numeric" value="1"></td>' +
-            '<td><input type="number" class="form-control form-control-sm item-price" min="0" step="0.000001" value="0"><input type="hidden" class="item-discount" value="0"></td>' +
+            '<td><input type="text" class="form-control form-control-sm item-price" inputmode="decimal" autocomplete="off" value="0"><input type="hidden" class="item-discount" value="0"></td>' +
             /* Celdas de partida reservadas para uso futuro. Al restaurarlas, quitar item-discount oculto del precio.
             '<td><input type="number" class="form-control form-control-sm item-discount" min="0" step="0.01" value="0" ' + (editing ? 'disabled title="El esquema actual no almacena descuentos por partida"' : '') + '></td>' +
             '<td class="item-subtotal invoice-money text-nowrap">$0.00</td><td class="item-tax invoice-money text-nowrap">$0.00</td><td class="item-total invoice-money fw-semibold text-nowrap">$0.00</td>' +
@@ -582,13 +612,14 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         if (initial) {
             select.value = String(initial.concepto_id || '');
             row.querySelector('.item-quantity').value = initial.cantidad;
-            row.querySelector('.item-price').value = initial.precio_unitario;
+            row.querySelector('.item-price').value = formatUnitPrice(initial.precio_unitario) ?? '0';
             row.querySelector('.item-discount').value = initial.descuento || 0;
             row.querySelector('.item-description').value = initial.descripcion || '';
             conceptChanged(row, false);
         } else if (focusNewItem) {
             select.focus();
         }
+        row.querySelector('.item-price').dataset.lastValid = row.querySelector('.item-price').value;
         if (window.lucide) window.lucide.createIcons();
         calculate();
     }
@@ -596,7 +627,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     function rowValues(row) {
         const concept = concepts.get(row.querySelector('.item-concept').value);
         const quantity = Number(row.querySelector('.item-quantity').value) || 0;
-        const price = Number(row.querySelector('.item-price').value) || 0;
+        const price = unitPriceValue(row.querySelector('.item-price'));
         const discount = Number(row.querySelector('.item-discount').value) || 0;
         const subtotal = quantity * price;
         const base = Math.max(0, subtotal - discount);
@@ -647,11 +678,10 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             return calculate();
         }
         if (resetValues) {
-            row.querySelector('.item-price').value = concept.precio_min;
+            row.querySelector('.item-price').value = formatUnitPrice(concept.precio_min) ?? '0';
+            row.querySelector('.item-price').dataset.lastValid = row.querySelector('.item-price').value;
             row.querySelector('.item-description').value = concept.concepto;
         }
-        row.querySelector('.item-price').min = '0';
-        row.querySelector('.item-price').removeAttribute('max');
         if (concept.unidades_max) row.querySelector('.item-quantity').max = concept.unidades_max;
         else row.querySelector('.item-quantity').removeAttribute('max');
         const selectedVatMode = vatRateSelect.value;
@@ -689,7 +719,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 concepto_id: Number(row.querySelector('.item-concept').value),
                 descripcion: row.querySelector('.item-description').value.trim(),
                 cantidad: Number(row.querySelector('.item-quantity').value),
-                precio_unitario: Number(row.querySelector('.item-price').value),
+                precio_unitario: unitPriceValue(row.querySelector('.item-price')),
                 descuento: Number(row.querySelector('.item-discount').value),
             })),
         };
@@ -725,7 +755,10 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         const row = event.target.closest('tr');
         if (event.target.classList.contains('item-concept')) conceptChanged(row); else calculate();
     });
-    itemsBody.addEventListener('input', calculate);
+    itemsBody.addEventListener('input', event => {
+        if (event.target.classList.contains('item-price')) updateUnitPriceInput(event.target);
+        calculate();
+    });
     withholdingIsrInput.addEventListener('input', calculate);
     withholdingVatInput.addEventListener('input', calculate);
     vatRateSelect.addEventListener('change', () => {
@@ -916,6 +949,14 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     form.addEventListener('submit', async event => {
         event.preventDefault();
         messages.innerHTML = '';
+        const invalidPrice = [...itemsBody.rows].map(row => row.querySelector('.item-price')).find(input =>
+            !/^\d+(?:\.\d{1,6})?$/.test(input.value.replaceAll(',', ''))
+        );
+        if (invalidPrice) {
+            showMessages(['Ingresa un precio unitario válido, sin signo y con máximo seis decimales.'], []);
+            invalidPrice.focus();
+            return;
+        }
         validateButton.disabled = true;
         validateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (editing ? 'Guardando...' : 'Validando...');
         try {
