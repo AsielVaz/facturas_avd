@@ -256,6 +256,7 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                     <form method="post" autocomplete="off">
                         <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
                         <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
+                        <input type="hidden" name="accion" value="verificar_2fa">
                         <div class="mb-4">
                             <label for="codigo_2fa" class="form-label login-label">Código 2FA</label>
                             <div class="login-control">
@@ -264,7 +265,7 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                             </div>
                         </div>
                         <div class="d-grid">
-                            <button class="btn login-submit" type="submit" name="accion" value="verificar_2fa">Verificar y entrar</button>
+                            <button class="btn login-submit" type="submit">Verificar y entrar</button>
                         </div>
                     </form>
                 <?php else: ?>
@@ -311,7 +312,24 @@ if (togglePassword) togglePassword.addEventListener('click', function () {
     if (window.lucide) window.lucide.createIcons();
 });
 const otpInput = document.getElementById('codigo_2fa');
-if (otpInput) otpInput.addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 6); });
+if (otpInput) {
+    const otpForm = otpInput.form;
+    const otpButton = otpForm.querySelector('button[type="submit"]');
+    let submitting = false;
+    otpInput.addEventListener('input', function (event) {
+        this.value = this.value.replace(/\D/g, '').slice(0, 6);
+        if (!event.isComposing && this.value.length === 6 && !submitting) otpForm.requestSubmit();
+    });
+    otpForm.addEventListener('submit', function (event) {
+        if (submitting) {
+            event.preventDefault();
+            return;
+        }
+        submitting = true;
+        otpButton.disabled = true;
+        otpButton.textContent = 'Verificando...';
+    });
+}
 </script>
 </body>
 </html>
