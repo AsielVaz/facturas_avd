@@ -5,9 +5,6 @@ $invoiceShowTypeSelector = $invoiceShowTypeSelector ?? false;
 $invoicePagination = $invoicePagination ?? ['total' => count($invoiceRows), 'pagina' => 1, 'paginas' => 1, 'por_pagina' => 10];
 $invoiceSearch = (string) ($_GET['buscar'] ?? '');
 $invoiceDate = (string) ($_GET['fecha'] ?? '');
-$hoyMexico = new DateTimeImmutable('now', new DateTimeZone('America/Mexico_City'));
-$mesesCortos = [1 => 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-$invoiceDatePlaceholder = $hoyMexico->format('d') . '-' . $mesesCortos[(int) $hoyMexico->format('n')] . '-' . $hoyMexico->format('Y');
 $buildPageUrl = static function (int $page): string {
     $parameters = $_GET;
     $parameters['pagina'] = $page;
@@ -32,7 +29,7 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
             </div>
             <!-- Input de fecha adaptado con formato visual amigable -->
             <div class="col-sm-5 col-lg-3">
-                <input name="fecha" id="filtro-fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="text" class="form-control" placeholder="<?= htmlspecialchars($invoiceDatePlaceholder) ?>" aria-label="Filtrar por fecha">
+                <input name="fecha" id="filtro-fecha" value="<?= htmlspecialchars($invoiceDate) ?>" type="text" class="form-control" placeholder="Seleccionar fecha" aria-label="Filtrar por fecha">
             </div>
             <?php if ($invoiceShowTypeSelector): ?>
             <div class="col-sm-7 col-lg-2">
@@ -110,7 +107,7 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
                 locale: "es",             // Idioma español para los meses
                 allowInput: true,
                 onReady: function (_selectedDates, _dateStr, instance) {
-                    if (instance.altInput) instance.altInput.placeholder = instance.input.placeholder;
+                    if (instance.altInput) instance.altInput.placeholder = 'Seleccionar fecha';
                 }
             });
         }
