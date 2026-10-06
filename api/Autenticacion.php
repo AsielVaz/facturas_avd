@@ -144,8 +144,6 @@ final class Autenticacion
             throw new AutenticacionException('Usuario o contraseña incorrectos.');
         }
 
-        $hashGuardado = (string) ($usuario['password'] ?? '');
-        self::actualizarHashSiNecesario($conexion, (int) $usuario['id'], $password, $hashGuardado);
         self::limpiarIntentos($conexion, $identificadorHash);
         $secretoSegundoFactor = strtoupper(trim((string) ($usuario['2fa'] ?? '')));
         if ($secretoSegundoFactor !== '') {
@@ -335,30 +333,6 @@ final class Autenticacion
             return hash_equals($hashNormalizado, sha1($password));
         }
         return $hash !== '' && hash_equals($hash, $password);
-    }
-
-    private static function actualizarHashSiNecesario(PDO $conexion, int $usuarioId, string $password, string $hashActual): void
-    {
-        [$algoritmo, $opciones] = self::configuracionHash();
-        $informacion = password_get_info($hashActual);
-        if (!empty($informacion['algo']) && !password_needs_rehash($hashActual, $algoritmo, $opciones)) {
-            return;
-        }
-        $nuevoHash = password_hash($password, $algoritmo, $opciones);
-        if (!is_string($nuevoHash) || $nuevoHash === '') {
-            throw new AutenticacionException('No fue posible actualizar de forma segura la contraseña.');
-        }
-        $actualizar = $conexion->prepare('UPDATE usuarios SET password = :nuevo WHERE id = :usuario AND password = :anterior');
-        $actualizar->execute([':nuevo' => $nuevoHash, ':usuario' => $usuarioId, ':anterior' => $hashActual]);
-    }
-
-    /** @return array{0: string|int, 1: array<string, int>} */
-    private static function configuracionHash(): array
-    {
-        if (defined('PASSWORD_ARGON2ID')) {
-            return [PASSWORD_ARGON2ID, ['memory_cost' => 65536, 'time_cost' => 4, 'threads' => 2]];
-        }
-        return [PASSWORD_BCRYPT, ['cost' => 12]];
     }
 
     private static function validarLimite(PDO $conexion, string $identificadorHash, string $ipHash): void
