@@ -201,8 +201,8 @@ $pageScripts = <<<'HTML'
             icon: 'warning',
             title: ids.length === 1 ? 'Eliminar prefactura' : 'Eliminar prefacturas seleccionadas',
             text: ids.length === 1
-                ? '¿Eliminar la prefactura ' + folio + '? Se desactivará y dejará de aparecer, pero sus datos no se borrarán.'
-                : '¿Eliminar las ' + ids.length + ' prefacturas seleccionadas? Se desactivarán y dejarán de aparecer, pero sus datos no se borrarán.',
+                ? '¿Eliminar la prefactura ' + folio + '? Se desactivará y dejará de aparecer.'
+                : '¿Eliminar las ' + ids.length + ' prefacturas seleccionadas? Se desactivarán y dejarán de aparecer.',
             showCancelButton: true,
             confirmButtonText: 'Sí, eliminar',
             cancelButtonText: 'Cancelar',
