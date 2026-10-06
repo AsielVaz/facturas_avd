@@ -173,6 +173,85 @@ $pageScripts = <<<'HTML'
 })();
 
 (() => {
+    const config = window.prefacturasConfig;
+    const checks = [...document.querySelectorAll('.js-prefactura-check')];
+    const selectAll = document.getElementById('selectAllPrefacturas');
+    const bulkButton = document.getElementById('deactivateSelectedPrefacturas');
+    const countLabel = document.getElementById('selectedPrefacturasCount');
+    const rowButtons = [...document.querySelectorAll('.js-deactivate-prefactura')];
+    if (!config || checks.length === 0 || !bulkButton || !selectAll) return;
+    let working = false;
+
+    const updateSelection = () => {
+        const selected = checks.filter(check => check.checked).length;
+        bulkButton.disabled = working || selected === 0;
+        countLabel.textContent = selected + (selected === 1 ? ' seleccionada' : ' seleccionadas') + ' en esta página';
+        selectAll.checked = selected === checks.length;
+        selectAll.indeterminate = selected > 0 && selected < checks.length;
+    };
+    selectAll.addEventListener('change', () => {
+        checks.forEach(check => { check.checked = selectAll.checked; });
+        updateSelection();
+    });
+    checks.forEach(check => check.addEventListener('change', updateSelection));
+
+    async function deactivate(ids, folio = '') {
+        if (working || ids.length === 0) return;
+        const confirmation = await Swal.fire({
+            icon: 'warning',
+            title: ids.length === 1 ? 'Eliminar prefactura' : 'Eliminar prefacturas seleccionadas',
+            text: ids.length === 1
+                ? '¿Eliminar la prefactura ' + folio + '? Se desactivará y dejará de aparecer, pero sus datos no se borrarán.'
+                : '¿Eliminar las ' + ids.length + ' prefacturas seleccionadas? Se desactivarán y dejarán de aparecer, pero sus datos no se borrarán.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc2626',
+        });
+        if (!confirmation.isConfirmed || working) return;
+        working = true;
+        checks.forEach(check => { check.disabled = true; });
+        selectAll.disabled = true;
+        rowButtons.forEach(button => { button.disabled = true; });
+        updateSelection();
+        try {
+            const response = await fetch('api/facturas.php?accion=desactivar_prefacturas', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({csrf: config.csrf, factura_ids: ids}),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'No fue posible eliminar las prefacturas.');
+            await Swal.fire({icon: 'success', title: 'Prefacturas eliminadas', text: data.mensaje, confirmButtonText: 'Aceptar'});
+            window.location.reload();
+        } catch (error) {
+            const uncertain = error instanceof TypeError || error instanceof SyntaxError;
+            await Swal.fire({
+                icon: uncertain ? 'warning' : 'error',
+                title: uncertain ? 'Resultado sin confirmar' : 'No se pudieron eliminar',
+                text: uncertain
+                    ? 'No se pudo confirmar la respuesta. Actualiza la lista para comprobar cuáles prefacturas siguen activas antes de repetir la operación.'
+                    : (error.message || 'No fue posible eliminar las prefacturas.'),
+                confirmButtonText: 'Aceptar',
+            });
+            if (uncertain) {
+                window.location.reload();
+                return;
+            }
+            working = false;
+            checks.forEach(check => { check.disabled = false; });
+            selectAll.disabled = false;
+            rowButtons.forEach(button => { button.disabled = false; });
+            updateSelection();
+        }
+    }
+
+    bulkButton.addEventListener('click', () => deactivate(checks.filter(check => check.checked).map(check => Number(check.value))));
+    rowButtons.forEach(button => button.addEventListener('click', () => deactivate([Number(button.dataset.invoiceId)], button.dataset.invoiceFolio || '')));
+})();
+
+(() => {
     const config = window.satStatusConfig;
     const badges = [...document.querySelectorAll('.js-invoice-status[data-invoice-id]')];
     if (!config || badges.length === 0) return;

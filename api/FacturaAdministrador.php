@@ -14,6 +14,77 @@ final class FacturaAdministrador
         $this->empresa = max(1, $empresa ?? SesionEmpresa::empresaActual());
     }
 
+    /** @param array<int, mixed> $facturaIds */
+    public function desactivarPrefacturas(array $facturaIds): int
+    {
+        if ($facturaIds === [] || count($facturaIds) > 50) {
+            throw new RuntimeException('Selecciona entre 1 y 50 prefacturas para desactivar.');
+        }
+        $ids = [];
+        foreach ($facturaIds as $valor) {
+            $id = filter_var($valor, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($id === false) {
+                throw new RuntimeException('La selección contiene una prefactura no válida.');
+            }
+            $ids[] = $id;
+        }
+        $ids = array_values(array_unique($ids));
+        sort($ids, SORT_NUMERIC);
+
+        // Comparte el bloqueo por factura con el timbrado para no desactivarla mientras se envía al PAC.
+        $bloqueos = [];
+        try {
+            $directorioFirmados = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'xml' . DIRECTORY_SEPARATOR . 'firmados';
+            if (!is_dir($directorioFirmados) && !mkdir($directorioFirmados, 0775, true) && !is_dir($directorioFirmados)) {
+                throw new RuntimeException('No fue posible preparar el bloqueo de las prefacturas.');
+            }
+            foreach ($ids as $id) {
+                $ruta = $directorioFirmados . DIRECTORY_SEPARATOR . '.timbrar-' . $id . '.lock';
+                $bloqueo = fopen($ruta, 'c');
+                if ($bloqueo === false || !flock($bloqueo, LOCK_EX)) {
+                    if (is_resource($bloqueo)) fclose($bloqueo);
+                    throw new RuntimeException('No fue posible bloquear la prefactura para desactivarla.');
+                }
+                $bloqueos[] = $bloqueo;
+            }
+
+            $marcadores = implode(',', array_fill(0, count($ids), '?'));
+            $this->conexion->beginTransaction();
+            try {
+                $consulta = $this->conexion->prepare(
+                    "SELECT id, uuid, desactivado FROM facturas WHERE razon = ? AND id IN ({$marcadores}) FOR UPDATE"
+                );
+                $consulta->execute([$this->empresa, ...$ids]);
+                $facturas = $consulta->fetchAll();
+                if (count($facturas) !== count($ids)) {
+                    throw new RuntimeException('Alguna prefactura no existe o no pertenece a la empresa activa. No se desactivó ninguna.');
+                }
+                foreach ($facturas as $factura) {
+                    if (trim((string) ($factura['uuid'] ?? '')) !== '' || $factura['desactivado'] !== null) {
+                        throw new RuntimeException('Alguna prefactura ya fue timbrada o desactivada. No se desactivó ninguna.');
+                    }
+                }
+                $actualizar = $this->conexion->prepare(
+                    "UPDATE facturas SET desactivado = 1 WHERE razon = ? AND desactivado IS NULL AND id IN ({$marcadores})"
+                );
+                $actualizar->execute([$this->empresa, ...$ids]);
+                if ($actualizar->rowCount() !== count($ids)) {
+                    throw new RuntimeException('No se pudo desactivar la selección completa. No se desactivó ninguna.');
+                }
+                $this->conexion->commit();
+                return count($ids);
+            } catch (Throwable $error) {
+                if ($this->conexion->inTransaction()) $this->conexion->rollBack();
+                throw $error;
+            }
+        } finally {
+            foreach ($bloqueos as $bloqueo) {
+                flock($bloqueo, LOCK_UN);
+                fclose($bloqueo);
+            }
+        }
+    }
+
     /**
      * @return array{registros: array<int, array<string, mixed>>, total: int, pagina: int, por_pagina: int, paginas: int}
      */
@@ -95,9 +166,11 @@ final class FacturaAdministrador
                         SELECT DATE_FORMAT(MAX(f2.fecha), '%Y-%m')
                         FROM facturas f2
                         WHERE f2.razon = :empresa_mes
+                          AND f2.desactivado IS NULL
                     )) AS este_mes
                 FROM facturas f
                 WHERE {$condicionTipo}
+                  AND f.desactivado IS NULL
                   AND f.razon = :empresa_actual";
 
         $consulta = $this->conexion->prepare($sql);
@@ -119,6 +192,7 @@ final class FacturaAdministrador
     {
         $condiciones = [
             'f.razon = :empresa_actual',
+            'f.desactivado IS NULL',
             $tipo === 'timbradas'
             ? "f.uuid IS NOT NULL AND TRIM(f.uuid) <> ''"
             : "(f.uuid IS NULL OR TRIM(f.uuid) = '')"

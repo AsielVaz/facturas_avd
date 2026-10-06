@@ -195,7 +195,7 @@ final class CfdiTimbradoServicio
                     e.rfc, e.usuario AS usuario_pac, e.password_r AS password_pac
              FROM facturas f
              INNER JOIN empresas e ON e.id = f.razon
-             WHERE f.id = :factura AND f.razon = :empresa
+             WHERE f.id = :factura AND f.razon = :empresa AND f.desactivado IS NULL
              LIMIT 1'
         );
         $consulta->execute([':factura' => $facturaId, ':empresa' => $empresaId]);

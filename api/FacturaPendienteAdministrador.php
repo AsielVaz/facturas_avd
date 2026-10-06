@@ -45,6 +45,7 @@ final class FacturaPendienteAdministrador
              LEFT JOIN catalogo_usos_cfdi uso ON uso.id = f.uso_cfdi
              WHERE f.id = :factura
                AND f.razon = :empresa
+               AND f.desactivado IS NULL
                AND (f.uuid IS NULL OR TRIM(f.uuid) = '')
              LIMIT 1"
         );

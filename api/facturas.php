@@ -104,7 +104,7 @@ try {
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $accion = strtolower(trim((string) ($_GET['accion'] ?? '')));
-        if (!in_array($accion, ['guardar', 'guardar_prefactura', 'timbrar'], true)) {
+        if (!in_array($accion, ['guardar', 'guardar_prefactura', 'timbrar', 'desactivar_prefacturas'], true)) {
             http_response_code(405);
             echo json_encode(['ok' => false, 'error' => 'La operación solicitada no existe.'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             exit;
@@ -125,6 +125,19 @@ try {
         $usuarioId = isset($_SESSION['usuario_id']) && (int) $_SESSION['usuario_id'] > 0
             ? (int) $_SESSION['usuario_id']
             : null;
+
+        if ($accion === 'desactivar_prefacturas') {
+            if (!isset($datos['factura_ids']) || !is_array($datos['factura_ids'])) {
+                throw new RuntimeException('Selecciona las prefacturas que deseas desactivar.');
+            }
+            $cantidad = (new FacturaAdministrador($conexion))->desactivarPrefacturas($datos['factura_ids']);
+            echo json_encode([
+                'ok' => true,
+                'mensaje' => $cantidad === 1 ? 'La prefactura fue desactivada.' : "Se desactivaron {$cantidad} prefacturas.",
+                'desactivadas' => $cantidad,
+            ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            exit;
+        }
 
         if ($accion === 'timbrar') {
             $facturaId = max(0, (int) ($datos['factura_id'] ?? 0));

@@ -47,10 +47,17 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
             </div>
         </form>
     </div>
+    <?php if ($invoiceType === 'prefactura' && $invoiceRows !== []): ?>
+        <div class="card-body border-bottom py-2 d-flex align-items-center gap-2">
+            <button id="deactivateSelectedPrefacturas" class="btn btn-sm btn-outline-danger" type="button" disabled><i data-lucide="trash-2" class="fs-16 me-1"></i>Eliminar seleccionadas</button>
+            <small id="selectedPrefacturasCount" class="text-muted">0 seleccionadas en esta página</small>
+        </div>
+    <?php endif; ?>
     <div class="table-responsive">
         <table class="table table-hover text-nowrap mb-0 erp-table">
             <thead>
                 <tr>
+                    <?php if ($invoiceType === 'prefactura'): ?><th class="ps-3"><input id="selectAllPrefacturas" class="form-check-input" type="checkbox" aria-label="Seleccionar todas las prefacturas de esta página" <?= $invoiceRows === [] ? 'disabled' : '' ?>></th><?php endif; ?>
                     <th class="ps-3">Folio</th>
                     <th>Cliente</th>
                     <th>Fecha</th>
@@ -63,6 +70,7 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
             <tbody>
             <?php foreach ($invoiceRows as $row): ?>
                 <tr>
+                    <?php if ($invoiceType === 'prefactura'): ?><td class="ps-3"><input class="form-check-input js-prefactura-check" type="checkbox" value="<?= (int) $row['id'] ?>" aria-label="Seleccionar prefactura <?= htmlspecialchars($row['folio']) ?>"></td><?php endif; ?>
                     <td class="ps-3"><a href="#" class="fw-semibold"><?= htmlspecialchars($row['folio']) ?></a><small class="d-block text-muted"><?= htmlspecialchars($row['serie']) ?></small></td>
                     <td><div class="d-flex align-items-center gap-2"><span class="erp-avatar bg-primary-subtle text-primary"><?= htmlspecialchars($row['initials']) ?></span><div><span class="fw-medium"><?= htmlspecialchars($row['client']) ?></span><small class="d-block text-muted"><?= htmlspecialchars($row['rfc']) ?></small></div></div></td>
                     <td><?= htmlspecialchars($row['date']) ?></td>
@@ -78,6 +86,7 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
                             <a class="btn btn-sm btn-soft-primary" href="<?= htmlspecialchars($buildPrefacturaEditUrl((int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Editar prefactura" aria-label="Editar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="square-pen" class="fs-16"></i></a>
                             <a class="btn btn-sm btn-soft-primary" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar prefactura" aria-label="Descargar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="file-down" class="fs-16"></i></a>
                             <button class="btn btn-sm btn-soft-success js-stamp-invoice" type="button" data-invoice-id="<?= (int) $row['id'] ?>" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Timbrar prefactura" aria-label="Timbrar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="badge-check" class="fs-16"></i></button>
+                            <button class="btn btn-sm btn-soft-danger js-deactivate-prefactura" type="button" data-invoice-id="<?= (int) $row['id'] ?>" data-invoice-folio="<?= htmlspecialchars($row['folio']) ?>" title="Eliminar prefactura" aria-label="Eliminar prefactura <?= htmlspecialchars($row['folio']) ?>"><i data-lucide="trash-2" class="fs-16"></i></button>
                         <?php else: ?>
                             <a class="btn btn-sm btn-soft-primary" href="facturar.php?id=<?= (int) $row['id'] ?>" title="Editar"><i data-lucide="square-pen" class="fs-16"></i></a>
                             <a class="btn btn-sm btn-soft-danger" href="api/factura-pdf.php?id=<?= (int) $row['id'] ?>" title="Descargar PDF de prueba"><i data-lucide="file-down" class="fs-16"></i></a>
@@ -86,7 +95,7 @@ $buildPrefacturaEditUrl = static function (int $invoiceId) use ($invoiceSearch, 
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($invoiceRows === []): ?><tr><td colspan="7" class="text-center py-5"><i data-lucide="file-search" class="text-muted mb-2" style="width:34px;height:34px"></i><p class="text-muted mb-0">No se encontraron <?= $invoiceType === 'prefactura' ? 'prefacturas' : 'facturas' ?> con estos filtros.</p></td></tr><?php endif; ?>
+            <?php if ($invoiceRows === []): ?><tr><td colspan="<?= $invoiceType === 'prefactura' ? '8' : '7' ?>" class="text-center py-5"><i data-lucide="file-search" class="text-muted mb-2" style="width:34px;height:34px"></i><p class="text-muted mb-0">No se encontraron <?= $invoiceType === 'prefactura' ? 'prefacturas' : 'facturas' ?> con estos filtros.</p></td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
