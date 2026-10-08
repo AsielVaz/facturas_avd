@@ -66,6 +66,10 @@ $sidebarLogo = 'assets/images/logo.jpg';
                     <div class="dropdown-menu dropdown-menu-end">
                         <a class="dropdown-item" href="empresas-s.php"><i data-lucide="building-2"
                                 class="fs-16 text-muted align-middle me-2"></i>Cambiar empresa</a>
+                        <?php if (Autenticacion::puedeAdministrarClientes()): ?>
+                        <a class="dropdown-item" href="administrar-clientes.php"><i data-lucide="users-round"
+                                class="fs-16 text-muted align-middle me-2"></i>Administrar clientes</a>
+                        <?php endif; ?>
                         <div class="dropdown-divider"></div>
                         <form method="post" action="logout.php"><input type="hidden" name="csrf"
                                 value="<?= htmlspecialchars(Autenticacion::tokenLogout()) ?>"><button

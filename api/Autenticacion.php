@@ -281,6 +281,12 @@ final class Autenticacion
         return max(0, (int) ($_SESSION['auth_usuario_id'] ?? 0));
     }
 
+    public static function puedeAdministrarClientes(): bool
+    {
+        SesionEmpresa::iniciar();
+        return in_array((string) ($_SESSION['auth_tipo'] ?? ''), ['administrador', 'administrador_b'], true);
+    }
+
     public static function accesoRestringidoAEmpresas(): bool
     {
         SesionEmpresa::iniciar();
