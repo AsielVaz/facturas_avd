@@ -11,8 +11,13 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 
-$destino = Autenticacion::rutaSegura((string) ($_POST['next'] ?? $_GET['next'] ?? ($_SESSION['login_2fa_next'] ?? '')));
-if (Autenticacion::autenticado()) {
+$destino = Autenticacion::rutaSegura((string) ($_POST['next'] ?? $_GET['next'] ?? ($_SESSION['passkey_enroll_next'] ?? $_SESSION['login_2fa_next'] ?? '')));
+$sesionAutenticada = Autenticacion::autenticado();
+$permisoRegistro = $_SESSION['passkey_enroll'] ?? null;
+$registroPasskeyPendiente = $sesionAutenticada && is_array($permisoRegistro)
+    && (int) ($permisoRegistro['usuario_id'] ?? 0) === Autenticacion::usuarioActualId()
+    && time() - (int) ($permisoRegistro['creado'] ?? 0) <= 300;
+if ($sesionAutenticada && !$registroPasskeyPendiente) {
     header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
     exit;
 }
@@ -28,8 +33,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $errorLogin = 'La solicitud expiró. Recarga la página e intenta nuevamente.';
     } elseif ($accion === 'cancelar_2fa') {
         Autenticacion::cancelarSegundoFactor();
-        unset($_SESSION['login_2fa_next']);
+        unset($_SESSION['login_2fa_next'], $_SESSION['passkey_enroll_requested']);
         $identificador = '';
+    } elseif ($accion === 'omitir_passkey' && $registroPasskeyPendiente) {
+        unset($_SESSION['passkey_enroll'], $_SESSION['passkey_enroll_next']);
+        header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
+        exit;
     } else {
         try {
             if ($accion === 'verificar_2fa') {
@@ -38,22 +47,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     (string) ($_POST['codigo_2fa'] ?? '')
                 );
                 $destino = Autenticacion::rutaSegura((string) ($_SESSION['login_2fa_next'] ?? $destino));
-                unset($_SESSION['login_csrf'], $_SESSION['login_2fa_next']);
-                header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
-                exit;
+                $registrar = !empty($_SESSION['passkey_enroll_requested']);
+                unset($_SESSION['login_2fa_next'], $_SESSION['passkey_enroll_requested'],
+                    $_SESSION['passkey_enroll'], $_SESSION['passkey_enroll_next']);
+                if ($registrar) {
+                    $_SESSION['passkey_enroll'] = ['usuario_id' => Autenticacion::usuarioActualId(), 'creado' => time()];
+                    $_SESSION['passkey_enroll_next'] = $destino;
+                    $registroPasskeyPendiente = true;
+                } else {
+                    unset($_SESSION['login_csrf']);
+                    header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
+                    exit;
+                }
             }
 
-            $sesionCompleta = Autenticacion::iniciarSesion(
-                Conexion::obtener(),
-                $identificador,
-                (string) ($_POST['password'] ?? '')
-            );
-            if ($sesionCompleta) {
-                unset($_SESSION['login_csrf'], $_SESSION['login_2fa_next']);
-                header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
-                exit;
+            if ($accion !== 'verificar_2fa') {
+                $sesionCompleta = Autenticacion::iniciarSesion(
+                    Conexion::obtener(),
+                    $identificador,
+                    (string) ($_POST['password'] ?? '')
+                );
+                $registrar = ($_POST['registrar_passkey'] ?? '') === '1';
+                if ($sesionCompleta) {
+                    unset($_SESSION['login_2fa_next'], $_SESSION['passkey_enroll'], $_SESSION['passkey_enroll_next']);
+                    if ($registrar) {
+                        $_SESSION['passkey_enroll'] = ['usuario_id' => Autenticacion::usuarioActualId(), 'creado' => time()];
+                        $_SESSION['passkey_enroll_next'] = $destino;
+                        $registroPasskeyPendiente = true;
+                    } else {
+                        unset($_SESSION['login_csrf']);
+                        header('Location: ' . ($destino !== '' ? $destino : 'facturas.php'));
+                        exit;
+                    }
+                } else {
+                    $_SESSION['passkey_enroll_requested'] = $registrar;
+                    $_SESSION['login_2fa_next'] = $destino;
+                }
             }
-            $_SESSION['login_2fa_next'] = $destino;
         } catch (AutenticacionException $error) {
             $errorLogin = $error->getMessage();
         } catch (Throwable $error) {
@@ -72,7 +102,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
     $_SESSION['login_csrf'] = bin2hex(random_bytes(32));
 }
-$requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
+$requiereSegundoFactor = !$registroPasskeyPendiente && Autenticacion::segundoFactorPendiente();
 ?>
 <!DOCTYPE html>
 <html lang="es" data-bs-theme="dark">
@@ -242,8 +272,8 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                 <?php endif; ?>
 
                 <div class="mb-4">
-                    <h1 class="login-heading fw-bold mb-2"><?= $requiereSegundoFactor ? 'Verificación en dos pasos' : 'Bienvenido de nuevo' ?></h1>
-                    <p class="login-subtitle mb-0"><?= $requiereSegundoFactor ? 'Ingresa el código de 6 dígitos de tu app.' : 'Ingresa tus credenciales para continuar.' ?></p>
+                    <h1 class="login-heading fw-bold mb-2"><?= $registroPasskeyPendiente ? 'Registrar passkey' : ($requiereSegundoFactor ? 'Verificación en dos pasos' : 'Bienvenido de nuevo') ?></h1>
+                    <p class="login-subtitle mb-0"><?= $registroPasskeyPendiente ? 'Protege los siguientes accesos con tu dispositivo.' : ($requiereSegundoFactor ? 'Ingresa el código de 6 dígitos de tu app.' : 'Ingresa tus credenciales para continuar.') ?></p>
                 </div>
 
                 <?php if ($errorLogin !== ''): ?>
@@ -252,7 +282,21 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                     <div class="alert alert-success py-2 small" role="status"><i data-lucide="circle-check" class="fs-16 me-1"></i>La sesión se cerró correctamente.</div>
                 <?php endif; ?>
 
-                <?php if ($requiereSegundoFactor): ?>
+                <?php if ($registroPasskeyPendiente): ?>
+                    <div class="mb-3">
+                        <label for="passkeyName" class="form-label login-label">Nombre del dispositivo</label>
+                        <input id="passkeyName" type="text" class="form-control" maxlength="100" value="Mi dispositivo" autocomplete="off">
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button id="registerPasskeyButton" class="btn login-submit" type="button" disabled>Registrar passkey</button>
+                        <form method="post">
+                            <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
+                            <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
+                            <button class="btn btn-link login-back w-100" type="submit" name="accion" value="omitir_passkey">Continuar sin registrar</button>
+                        </form>
+                    </div>
+                    <p id="passkeyInfo" class="login-subtitle mt-3 mb-0" role="status"></p>
+                <?php elseif ($requiereSegundoFactor): ?>
                     <form method="post" autocomplete="off">
                         <input type="hidden" name="csrf" value="<?= htmlspecialchars((string) $_SESSION['login_csrf']) ?>">
                         <input type="hidden" name="next" value="<?= htmlspecialchars($destino) ?>">
@@ -288,10 +332,18 @@ $requiereSegundoFactor = Autenticacion::segundoFactorPendiente();
                                 <button id="togglePassword" class="password-toggle" type="button" aria-label="Mostrar contraseña"><i data-lucide="eye" class="fs-17"></i></button>
                             </div>
                         </div>
+                        <div class="form-check mb-3">
+                            <input id="registerPasskeyIntent" class="form-check-input" type="checkbox" name="registrar_passkey" value="1">
+                            <label class="form-check-label login-subtitle" for="registerPasskeyIntent">Registrar una passkey después de entrar</label>
+                        </div>
                         <div class="d-grid">
                             <button class="btn login-submit" type="submit">Continuar <span class="ms-1">→</span></button>
                         </div>
                     </form>
+                    <div class="d-grid mt-3">
+                        <button id="loginPasskeyButton" class="btn btn-outline-warning" type="button" disabled><i data-lucide="key-round" class="fs-16 me-1"></i>Entrar con mi passkey</button>
+                    </div>
+                    <p id="passkeyInfo" class="login-subtitle text-center mt-2 mb-0" role="status"></p>
                 <?php endif; ?>
 
                 <p class="login-footer text-center mt-4 mb-0">Copyright © <?= date('Y') ?> Sistema 14. Todos los derechos reservados.</p>
@@ -331,5 +383,7 @@ if (otpInput) {
     });
 }
 </script>
+<script>window.passkeyLoginConfig = <?= json_encode(['next' => $destino !== '' ? $destino : 'facturas.php'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>
+<script src="assets/js/passkeys-login.js"></script>
 </body>
 </html>

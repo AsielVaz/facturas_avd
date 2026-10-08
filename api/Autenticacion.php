@@ -217,6 +217,25 @@ final class Autenticacion
         self::completarSesion($conexion, $usuario);
     }
 
+    /** Inicia la misma sesión del ERP tras verificar criptográficamente una passkey registrada. */
+    public static function iniciarSesionConPasskey(PDO $conexion, int $usuarioId): void
+    {
+        if ($usuarioId <= 0) {
+            throw new AutenticacionException('La cuenta de la passkey no está disponible.');
+        }
+        $consulta = $conexion->prepare(
+            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen FROM usuarios WHERE id = :usuario LIMIT 1'
+        );
+        $consulta->execute([':usuario' => $usuarioId]);
+        $usuario = $consulta->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($usuario)) {
+            throw new AutenticacionException('La cuenta de la passkey no está disponible.');
+        }
+        unset($_SESSION['empresa_actual'], $_SESSION['clave_actual'],
+            $_SESSION['logo_actual'], $_SESSION['empresa_actual_nombre']);
+        self::completarSesion($conexion, $usuario);
+    }
+
     public static function cancelarSegundoFactor(): void
     {
         SesionEmpresa::iniciar();

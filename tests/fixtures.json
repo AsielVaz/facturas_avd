@@ -1,0 +1,16 @@
+{
+  "challenge": "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M",
+  "origin": "https://sistema14.com",
+  "rp": "sistema14.com",
+  "id": "Y3JlZGVudGlhbC10ZXN0",
+  "registration": {
+    "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiWTJOalkyTmpZMk5qWTJOalkyTmpZMk5qWTJOalkyTmpZMk5qWTJOalkyTSIsIm9yaWdpbiI6Imh0dHBzOi8vc2lzdGVtYTE0LmNvbSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+    "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViTwxvhV_7KSlr31mPPyPCIMlB0QE1EIz8Xsv0qSelimiFFAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2NyZWRlbnRpYWwtdGVzdKUBAgMmIAEhWCCfc0x2WZDq-9A4_Y-FEDwR9pHaQ_LhueOcPmG-3TFlnyJYIEjxkhEVP5VvxYQlSZTtKP3P2TDosk3xlPCoqO-pbtGD"
+  },
+  "assertion": {
+    "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiWTJOalkyTmpZMk5qWTJOalkyTmpZMk5qWTJOalkyTmpZMk5qWTJOalkyTSIsIm9yaWdpbiI6Imh0dHBzOi8vc2lzdGVtYTE0LmNvbSIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+    "authenticatorData": "wxvhV_7KSlr31mPPyPCIMlB0QE1EIz8Xsv0qSelimiEFAAAAAQ",
+    "signature": "MEQCICQPCZ8tOyCGvaY-wUAYx2JKWLqZ2SSgKLt6doeOvPLzAiABOA_LexduGIIjSmy_DCod5SMl-WRTxjL1GYYtICcsNw",
+    "userHandle": null
+  }
+}
