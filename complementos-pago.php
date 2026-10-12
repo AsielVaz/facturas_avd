@@ -9,6 +9,17 @@ Autenticacion::exigirPagina();
 $empresa = SesionEmpresa::empresaActual();
 $consultaComplementos = new ComplementoPagoConsulta(Conexion::obtener(), $empresa);
 $esc = static fn(mixed $valor): string => htmlspecialchars(is_scalar($valor) ? (string) $valor : '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$clienteLegible = static function (mixed $valor): string {
+    $texto = is_string($valor) ? $valor : '';
+    if (!str_contains($texto, 'Ã')) return $texto;
+
+    // Algunos nombres llegan con UTF-8 mal interpretado (p. ej. COMPAÃ‘IA).
+    // Reparar solo cada secuencia afectada evita alterar el resto del nombre o la base de datos.
+    return preg_replace_callback('/Ã./u', static function (array $coincidencia): string {
+        $reparado = @iconv('UTF-8', 'Windows-1252', $coincidencia[0]);
+        return $reparado !== false && preg_match('//u', $reparado) ? $reparado : $coincidencia[0];
+    }, $texto) ?? $texto;
+};
 $fechaValida = static function (mixed $valor): string {
     if (!is_string($valor) || $valor === '') return '';
     $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
@@ -53,7 +64,9 @@ $folio = static function (mixed $serie, mixed $numero): string {
 $regresar = 'complementos-pago.php?' . http_build_query(['buscar' => $buscar, 'desde' => $desde, 'hasta' => $hasta, 'pagina' => $pagina]);
 $pageTitle = $detalle ? 'Detalle del complemento' : 'Complementos de pago';
 $pageEyebrow = 'Facturas / Complementos de pago';
-$pageAction = $detalle ? '<a href="' . $esc($regresar) . '" class="btn btn-soft-secondary">Volver al listado</a>' : '';
+$pageAction = $detalle
+    ? '<a href="' . $esc($regresar) . '" class="btn btn-soft-secondary">Volver al listado</a>'
+    : '<a href="nuevo-complemento-pago.php" class="btn btn-primary"><i data-lucide="plus" class="fs-18 me-1"></i>Nuevo complemento</a>';
 require __DIR__ . '/templates/page-start.php';
 ?>
 
@@ -63,12 +76,15 @@ require __DIR__ . '/templates/page-start.php';
 <div class="card">
     <div class="card-header d-flex flex-wrap justify-content-between gap-2">
         <div><h5 class="mb-1">Complemento <?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?></h5><span class="text-muted">Registro de pago #<?= (int) $detalle['id'] ?></span></div>
-        <span class="badge bg-info-subtle text-info align-self-start">Solo consulta</span>
+        <?php if (!empty($detalle['uuid'])): ?><div class="d-flex gap-2 align-self-start">
+            <button class="btn btn-sm btn-soft-secondary js-view-complement" type="button" data-pdf-url="api/complemento-pdf.php?id=<?= (int) $detalle['id'] ?>&amp;vista=1" data-folio="<?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?>" title="Ver PDF" aria-label="Ver PDF del complemento"><i data-lucide="eye" class="fs-16"></i></button>
+            <a class="btn btn-sm btn-soft-primary" href="api/complemento-documentos.php?id=<?= (int) $detalle['id'] ?>" title="Descargar XML y PDF" aria-label="Descargar XML y PDF del complemento"><i data-lucide="folder-down" class="fs-16"></i></a>
+        </div><?php else: ?><span class="badge bg-warning-subtle text-warning">Pendiente · sin timbrar</span><?php endif; ?>
     </div>
     <div class="card-body">
         <div class="row g-4">
             <div class="col-md-6"><div class="border rounded p-3 h-100"><h6>Comprobante</h6>
-                <dl class="row mb-0"><dt class="col-sm-5">Cliente</dt><dd class="col-sm-7"><?= $esc($detalle['cliente']) ?></dd>
+                <dl class="row mb-0"><dt class="col-sm-5">Cliente</dt><dd class="col-sm-7"><?= $esc($clienteLegible($detalle['cliente'])) ?></dd>
                 <dt class="col-sm-5">Folio</dt><dd class="col-sm-7"><?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?></dd>
                 <dt class="col-sm-5">UUID</dt><dd class="col-sm-7 text-break"><?= $esc(trim((string) ($detalle['uuid'] ?? '')) ?: 'Sin timbrar') ?></dd>
                 <dt class="col-sm-5">Estado registrado</dt><dd class="col-sm-7"><?= $esc($detalle['status'] ?: 'Sin estado') ?></dd>
@@ -99,21 +115,27 @@ require __DIR__ . '/templates/page-start.php';
     </div>
     <div class="table-responsive">
         <table class="table table-hover erp-table mb-0">
-            <thead><tr><th>Complemento</th><th>Factura relacionada</th><th>Cliente</th><th>Fecha de pago</th><th>Pago</th><th>Monto</th><th>Saldo restante</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Complemento</th><th>Factura relacionada</th><th>Cliente</th><th>Fecha de pago</th><th>Pago</th><th>Monto</th><th>Saldo restante</th><th>Estado</th><th class="text-end pe-3">Acciones</th></tr></thead>
             <tbody>
             <?php foreach ($listado['filas'] as $fila): ?>
             <tr>
                 <td><a href="?<?= $esc(http_build_query(['id' => $fila['id'], 'buscar' => $buscar, 'desde' => $desde, 'hasta' => $hasta, 'pagina' => $listado['pagina']])) ?>" class="fw-semibold"><?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?></a><div class="text-muted small text-truncate" style="max-width:170px" title="<?= $esc($fila['uuid']) ?>"><?= $esc($fila['uuid'] ?: 'Sin UUID') ?></div></td>
                 <td><?= $esc($folio($fila['serie_factura'], $fila['folio_factura'])) ?><?php if ((int) $fila['factura_disponible'] === 0): ?><div class="text-warning small">Factura no disponible</div><?php endif; ?></td>
-                <td><?= $esc($fila['cliente']) ?></td>
+                <td><?= $esc($clienteLegible($fila['cliente'])) ?></td>
                 <td><?= $esc($formatoFecha($fila['fecha_pago'])) ?></td>
                 <td><?= $esc($fila['num_pago'] ?: '—') ?></td>
                 <td class="fw-semibold text-nowrap"><?= $esc($moneda($fila['monto'])) ?></td>
                 <td class="text-nowrap"><?= $esc($moneda($fila['restante'])) ?></td>
                 <td><?= $esc($fila['status'] ?: 'Sin estado') ?></td>
+                <td class="text-end pe-3 text-nowrap">
+                    <?php if (!empty($fila['uuid'])): ?>
+                    <button class="btn btn-sm btn-soft-secondary js-view-complement" type="button" data-pdf-url="api/complemento-pdf.php?id=<?= (int) $fila['id'] ?>&amp;vista=1" data-folio="<?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>" title="Ver PDF" aria-label="Ver PDF del complemento <?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>"><i data-lucide="eye" class="fs-16"></i></button>
+                    <a class="btn btn-sm btn-soft-primary" href="api/complemento-documentos.php?id=<?= (int) $fila['id'] ?>" title="Descargar XML y PDF" aria-label="Descargar XML y PDF del complemento <?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>"><i data-lucide="folder-down" class="fs-16"></i></a>
+                    <?php else: ?><span class="text-muted small">Sin documentos fiscales</span><?php endif; ?>
+                </td>
             </tr>
             <?php endforeach; ?>
-            <?php if ($listado['filas'] === []): ?><tr><td colspan="8" class="text-center text-muted py-4">No hay complementos para esta empresa y estos filtros.</td></tr><?php endif; ?>
+            <?php if ($listado['filas'] === []): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay complementos para esta empresa y estos filtros.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -128,4 +150,45 @@ require __DIR__ . '/templates/page-start.php';
 </div>
 <?php endif; ?>
 
+<div class="modal fade" id="complementoPdfModal" tabindex="-1" aria-labelledby="complementoPdfTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="complementoPdfTitle">Complemento de pago</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body p-0 position-relative" style="min-height:75vh">
+                <div id="complementoPdfLoader" class="position-absolute top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center bg-body" style="z-index:2" role="status" aria-live="polite"><div class="text-center"><div class="spinner-border text-primary mb-3" aria-hidden="true"></div><p class="fw-semibold mb-0">Cargando PDF…</p></div></div>
+                <iframe id="complementoPdfFrame" title="Vista previa del complemento de pago" style="width:100%;height:75vh;border:0;background:#fff"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+<?php
+$pageScripts = <<<'HTML'
+<script>
+(() => {
+    const element = document.getElementById('complementoPdfModal');
+    const frame = document.getElementById('complementoPdfFrame');
+    const loader = document.getElementById('complementoPdfLoader');
+    const title = document.getElementById('complementoPdfTitle');
+    if (!element || !frame || !loader || !title) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(element);
+    document.querySelectorAll('.js-view-complement').forEach(button => {
+        button.addEventListener('click', () => {
+            title.textContent = 'Complemento ' + (button.dataset.folio || '');
+            loader.classList.remove('d-none');
+            loader.classList.add('d-flex');
+            frame.style.visibility = 'hidden';
+            frame.src = button.dataset.pdfUrl || 'about:blank';
+            modal.show();
+        });
+    });
+    frame.addEventListener('load', () => {
+        loader.classList.add('d-none');
+        loader.classList.remove('d-flex');
+        frame.style.visibility = 'visible';
+    });
+    element.addEventListener('hidden.bs.modal', () => { frame.src = 'about:blank'; });
+})();
+</script>
+HTML;
+?>
 <?php require __DIR__ . '/templates/scripts.php'; ?>

@@ -210,11 +210,17 @@ require 'templates/page-start.php';
                 <div class="card">
                     <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                         <div class="d-flex align-items-center gap-2"><span class="invoice-step bg-success-subtle text-success">3</span><div><h5 class="mb-0">Conceptos facturables</h5><small class="text-muted"><?= count($conceptos) ?> conceptos disponibles para la empresa activa.</small></div></div>
-                        <button id="addItemButton" type="button" class="btn btn-sm btn-soft-primary"><i data-lucide="plus" class="fs-16 me-1"></i>Agregar concepto</button>
+                        <div class="d-flex flex-wrap align-items-center gap-3">
+                            <div class="invoice-type-switcher form-check form-switch mb-0">
+                                <input id="grossTotalSwitch" class="form-check-input" type="checkbox" role="switch" aria-label="Total Bruto" title="El precio capturado incluye IVA; se desglosará en el total de la factura">
+                                <label class="form-check-label" for="grossTotalSwitch">Total Bruto</label>
+                            </div>
+                            <button id="addItemButton" type="button" class="btn btn-sm btn-soft-primary"><i data-lucide="plus" class="fs-16 me-1"></i>Agregar concepto</button>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table class="table align-middle mb-0 invoice-concepts-table">
-                            <thead><tr><th class="ps-3">Concepto</th><th>Cantidad</th><th>Precio unitario</th>
+                            <thead><tr><th class="ps-3">Concepto</th><th>Cantidad</th><th id="unitPriceHeading">Precio unitario</th>
                             <!-- Columnas de partida reservadas para uso futuro:
                             <th>Descuento</th><th>Importe</th><th>IVA</th><th>Total</th>
                             -->
@@ -304,6 +310,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const invoiceTypeSwitch = document.getElementById('invoiceTypeSwitch');
     const invoiceTypeLabel = document.getElementById('invoiceTypeLabel');
     const invoiceTypeHint = document.getElementById('invoiceTypeHint');
+    const grossTotalSwitch = document.getElementById('grossTotalSwitch');
+    const unitPriceHeading = document.getElementById('unitPriceHeading');
     const advancedFields = [...document.querySelectorAll('.invoice-advanced-field')];
     const exportSelect = document.getElementById('exportSelect');
     const vatRateGroup = document.getElementById('vatRateGroup');
@@ -412,6 +420,21 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
 
     function unitPriceValue(input) {
         return Number(input.value.replaceAll(',', '')) || 0;
+    }
+
+    function vatRateForConcept(concept) {
+        if (concept?.objeto_impuesto !== '02') return 0;
+        const mode = vatRateSelect.value;
+        return mode === '0' || mode === '16' ? Number(mode) : Number(concept.tasa_iva) || 0;
+    }
+
+    function netUnitPrice(row) {
+        const price = unitPriceValue(row.querySelector('.item-price'));
+        if (!grossTotalSwitch.checked) return price;
+        const concept = concepts.get(row.querySelector('.item-concept').value);
+        const rate = vatRateForConcept(concept);
+        // El backend guarda el valor unitario CFDI con hasta seis decimales.
+        return Math.round(price / (1 + rate / 100) * 1e6) / 1e6;
     }
 
     function escapeHtml(value) {
@@ -676,16 +699,11 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     function rowValues(row) {
         const concept = concepts.get(row.querySelector('.item-concept').value);
         const quantity = Number(row.querySelector('.item-quantity').value) || 0;
-        const price = unitPriceValue(row.querySelector('.item-price'));
+        const price = netUnitPrice(row);
         const discount = Number(row.querySelector('.item-discount').value) || 0;
         const subtotal = quantity * price;
         const base = Math.max(0, subtotal - discount);
-        const selectedVatMode = vatRateSelect.value;
-        const taxRate = concept?.objeto_impuesto !== '02'
-            ? 0
-            : selectedVatMode === '0' || selectedVatMode === '16'
-                ? Number(selectedVatMode)
-                : Number(concept?.tasa_iva) || 0;
+        const taxRate = vatRateForConcept(concept);
         const tax = concept?.objeto_impuesto === '02' ? base * (taxRate / 100) : 0;
         return {concept, quantity, price, discount, subtotal, taxRate, tax, total: base + tax};
     }
@@ -727,19 +745,15 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             return calculate();
         }
         if (resetValues) {
-            row.querySelector('.item-price').value = formatUnitPrice(concept.precio_min) ?? '0';
+            const suggestedPrice = Number(concept.precio_min) * (grossTotalSwitch.checked ? 1 + vatRateForConcept(concept) / 100 : 1);
+            row.querySelector('.item-price').value = formatUnitPrice(Number(suggestedPrice.toFixed(6))) ?? '0';
             row.querySelector('.item-price').dataset.lastValid = row.querySelector('.item-price').value;
             row.querySelector('.item-description').value = concept.concepto;
         }
         if (concept.unidades_max) row.querySelector('.item-quantity').max = concept.unidades_max;
         else row.querySelector('.item-quantity').removeAttribute('max');
-        const selectedVatMode = vatRateSelect.value;
-        const taxRate = concept.objeto_impuesto !== '02'
-            ? 0
-            : selectedVatMode === '0' || selectedVatMode === '16'
-                ? Number(selectedVatMode)
-                : concept.tasa_iva;
-        help.textContent = concept.clave_unidad_medida + ' · ObjetoImp ' + concept.objeto_impuesto + ' · IVA ' + taxRate + '% · Precio sugerido ' + money(concept.precio_min);
+        const taxRate = vatRateForConcept(concept);
+        help.textContent = concept.clave_unidad_medida + ' · ObjetoImp ' + concept.objeto_impuesto + ' · IVA ' + taxRate + '% · Precio sugerido ' + money(concept.precio_min) + ' antes de IVA';
         calculate();
     }
 
@@ -768,7 +782,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
                 concepto_id: Number(row.querySelector('.item-concept').value),
                 descripcion: row.querySelector('.item-description').value.trim(),
                 cantidad: Number(row.querySelector('.item-quantity').value),
-                precio_unitario: unitPriceValue(row.querySelector('.item-price')),
+                precio_unitario: netUnitPrice(row),
                 descuento: Number(row.querySelector('.item-discount').value),
             })),
         };
@@ -850,6 +864,14 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         applyInvoiceType();
     });
     invoiceTypeSwitch.addEventListener('change', updateSaveAvailability);
+    grossTotalSwitch.addEventListener('change', () => {
+        unitPriceHeading.textContent = grossTotalSwitch.checked ? 'Precio unitario (IVA incluido)' : 'Precio unitario';
+        validatedPayload = null;
+        if (saveInvoiceButton) saveInvoiceButton.disabled = true;
+        if (savePrefacturaButton) savePrefacturaButton.disabled = true;
+        calculate();
+        updateSaveAvailability();
+    });
     saveInvoiceButton?.addEventListener('click', async () => {
         if (!validatedPayload || saveInvoiceButton.disabled) return;
         previewContent.querySelectorAll('.save-invoice-feedback').forEach(element => element.remove());
