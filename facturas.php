@@ -5,7 +5,7 @@ $pageTitle = $mostrandoPrefacturas ? 'Prefacturas' : 'Facturas';
 $pageEyebrow = $mostrandoPrefacturas ? 'Facturas / Sin timbrar' : 'Facturas / CFDI emitidos';
 $activeModule = 'facturas';
 $activePage = 'facturas';
-$pageAction = '<a class="btn btn-primary" href="facturar.php"><i data-lucide="plus" class="fs-18 me-1"></i>Nueva factura</a>';
+$pageAction = '<div class="d-flex flex-wrap gap-2"><a class="btn btn-soft-secondary" href="complementos-pago.php"><i data-lucide="receipt-text" class="fs-18 me-1"></i>Complementos de pago</a><a class="btn btn-primary" href="facturar.php"><i data-lucide="plus" class="fs-18 me-1"></i>Nueva factura</a></div>';
 require_once __DIR__ . '/api/FacturaVistaAdministrador.php';
 require_once __DIR__ . '/api/Autenticacion.php';
 Autenticacion::exigirPagina();

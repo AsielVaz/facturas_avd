@@ -66,6 +66,8 @@ $sidebarLogo = 'assets/images/logo.jpg';
                     <div class="dropdown-menu dropdown-menu-end">
                         <a class="dropdown-item" href="empresas-s.php"><i data-lucide="building-2"
                                 class="fs-16 text-muted align-middle me-2"></i>Cambiar empresa</a>
+                        <a class="dropdown-item" href="complementos-pago.php"><i data-lucide="receipt-text"
+                                class="fs-16 text-muted align-middle me-2"></i>Complementos de pago</a>
                         <?php if (Autenticacion::puedeAdministrarClientes()): ?>
                         <a class="dropdown-item" href="administrar-clientes.php"><i data-lucide="users-round"
                                 class="fs-16 text-muted align-middle me-2"></i>Administrar clientes</a>
