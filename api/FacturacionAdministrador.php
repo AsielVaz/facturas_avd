@@ -208,7 +208,7 @@ final class FacturacionAdministrador
     {
         $metodos = $this->conexion->query(
             "SELECT id, UPPER(TRIM(clave)) AS clave, TRIM(metodo_pago) AS descripcion
-             FROM metodos_pago WHERE UPPER(TRIM(clave)) = 'PUE' ORDER BY id"
+             FROM metodos_pago WHERE UPPER(TRIM(clave)) IN ('PUE', 'PPD') ORDER BY FIELD(UPPER(TRIM(clave)), 'PUE', 'PPD'), id"
         )->fetchAll();
         $monedas = $this->conexion->query(
             "SELECT id, UPPER(TRIM(clave_moneda)) AS clave, TRIM(moneda) AS descripcion
@@ -286,14 +286,26 @@ final class FacturacionAdministrador
         }
 
         $catalogos = $this->obtenerCatalogos();
+        $tipoFactura = strtolower(trim((string) ($datos['tipo_factura'] ?? 'completa')));
+        if (!in_array($tipoFactura, ['sencilla', 'completa'], true)) {
+            $errores[] = 'Selecciona un tipo de factura válido.';
+            $tipoFactura = 'sencilla';
+        }
+        $facturaCompleta = $tipoFactura === 'completa';
         $moneda = $this->buscarCatalogoPorId($catalogos['monedas'], (int) ($datos['moneda_id'] ?? 0));
-        $metodo = $catalogos['metodos_pago'][0] ?? null;
+        $metodoId = (int) ($datos['metodo_pago_id'] ?? 0);
+        $metodo = $metodoId > 0
+            ? $this->buscarCatalogoPorId($catalogos['metodos_pago'], $metodoId)
+            : ($catalogos['metodos_pago'][0] ?? null);
         $forma = $this->buscarCatalogoPorId($catalogos['formas_pago'], (int) ($datos['forma_pago_id'] ?? 0));
         if ($moneda === null) {
             $errores[] = 'Selecciona una moneda válida.';
         }
         if ($metodo === null) {
             $errores[] = 'Selecciona un método de pago válido.';
+        }
+        if (!$facturaCompleta && ($metodo['clave'] ?? '') !== 'PUE') {
+            $errores[] = 'La factura sencilla solo permite método de pago PUE.';
         }
         if ($forma === null) {
             $errores[] = 'Selecciona una forma de pago válida.';
@@ -370,12 +382,6 @@ final class FacturacionAdministrador
         $ivaTotal = 0.0;
         $retencionIsrTotal = 0.0;
         $retencionIvaTotal = 0.0;
-        $tipoFactura = strtolower(trim((string) ($datos['tipo_factura'] ?? 'completa')));
-        if (!in_array($tipoFactura, ['sencilla', 'completa'], true)) {
-            $errores[] = 'Selecciona un tipo de factura válido.';
-            $tipoFactura = 'sencilla';
-        }
-        $facturaCompleta = $tipoFactura === 'completa';
         // Si un consumidor anterior todavía no envía los interruptores se conserva
         // el comportamiento previo. El formulario nuevo siempre envía true o false.
         $incluirRetencionIsr = $facturaCompleta && (

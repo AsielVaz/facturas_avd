@@ -105,14 +105,34 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const idSolicitud = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     let solicitudActual = 0;
 
-    function aviso(texto) {
-        if (window.Swal) return Swal.fire({icon: 'error', title: 'No se pudo continuar', text: texto});
-        alert(texto);
+    function aviso(texto, diagnostico = null) {
+        const detalles = [texto];
+        if (diagnostico?.etapa) detalles.push('Etapa: ' + diagnostico.etapa);
+        if (diagnostico?.codigo_sql) detalles.push('Código SQL: ' + diagnostico.codigo_sql);
+        if (diagnostico?.referencia) detalles.push('Referencia para el registro del servidor: ' + diagnostico.referencia);
+        const mensaje = detalles.join('\n');
+        if (window.Swal) return Swal.fire({
+            icon: 'error', title: 'No se pudo continuar', text: mensaje,
+            didOpen: popup => { popup.querySelector('.swal2-html-container').style.whiteSpace = 'pre-line'; },
+        });
+        alert(mensaje);
+    }
+    async function leerRespuesta(response, operacion) {
+        const contenido = await response.text();
+        try {
+            return JSON.parse(contenido);
+        } catch {
+            throw new Error('El servidor devolvió una respuesta no válida al ' + operacion + ' (HTTP ' + response.status + '). Revisa el registro de PHP.');
+        }
     }
     async function obtener(url) {
         const response = await fetch(url, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) throw new Error(payload.error || 'No fue posible consultar los datos.');
+        const payload = await leerRespuesta(response, 'consultar los datos');
+        if (!response.ok || !payload.ok) {
+            const error = new Error(payload.error || 'No fue posible consultar los datos.');
+            error.diagnostico = payload;
+            throw error;
+        }
         return payload.datos;
     }
     function mostrarVacio(texto) {
@@ -202,7 +222,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             datos.perfiles.forEach(item => perfil.add(new Option(item.clave_corta + ' · ' + item.razon_social + ' · ' + item.rfc, item.id)));
             perfil.disabled = !datos.perfiles.length;
         } catch (error) {
-            if (actual === solicitudActual) aviso(error.message);
+            if (actual === solicitudActual) aviso(error.message, error.diagnostico);
         }
     });
     perfil.addEventListener('change', async () => {
@@ -213,7 +233,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             const facturas = await obtener('api/complementos-pago-crear.php?accion=facturas&cliente_id=' + encodeURIComponent(cliente.value) + '&perfil_id=' + encodeURIComponent(perfil.value));
             if (actual === solicitudActual) mostrarFacturas(facturas);
         } catch (error) {
-            if (actual === solicitudActual) { mostrarVacio('No fue posible cargar las facturas.'); aviso(error.message); }
+            if (actual === solicitudActual) { mostrarVacio('No fue posible cargar las facturas.'); aviso(error.message, error.diagnostico); }
         }
     });
     forma.addEventListener('change', actualizarTotal);
@@ -239,13 +259,17 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                     cliente_id: Number(cliente.value), perfil_id: Number(perfil.value),
                     forma_pago_id: Number(forma.value), fecha_pago: fecha.value, facturas}),
             });
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) throw new Error(payload.error || 'No fue posible guardar el complemento.');
+            const payload = await leerRespuesta(response, 'guardar el complemento');
+            if (!response.ok || !payload.ok) {
+                const error = new Error(payload.error || 'No fue posible guardar el complemento.');
+                error.diagnostico = payload;
+                throw error;
+            }
             if (window.Swal) await Swal.fire({icon: 'success', title: 'Complemento guardado',
                 text: payload.complemento.folio + ' quedó pendiente, sin timbrar.'});
             window.location.assign('complementos-pago.php?id=' + encodeURIComponent(payload.complemento.id));
         } catch (error) {
-            aviso(error.message || 'No fue posible guardar el complemento.');
+            aviso(error.message || 'No fue posible guardar el complemento.', error.diagnostico);
             guardar.textContent = 'Guardar complemento pendiente';
             actualizarTotal();
         }

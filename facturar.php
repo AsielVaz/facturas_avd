@@ -171,8 +171,8 @@ require 'templates/page-start.php';
                             <div class="col-md-3"><label for="invoiceDate" class="form-label">Fecha</label><input id="invoiceDate" type="text" class="form-control invoice-readonly" readonly value="<?= htmlspecialchars($fechaFacturaVisible) ?>" data-date-iso="<?= htmlspecialchars($fechaFacturaIso) ?>"></div>
                             <div class="col-md-3"><label for="currencySelect" class="form-label">Moneda</label><select id="currencySelect" class="form-select" required><?php foreach (($catalogos['monedas'] ?? []) as $moneda): ?><option value="<?= (int) $moneda['id'] ?>" data-clave="<?= htmlspecialchars((string) $moneda['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['moneda_id'] === (int) $moneda['id'] : $moneda['clave'] === 'MXN') ? 'selected' : '' ?>><?= htmlspecialchars($moneda['clave'] . ' · ' . $moneda['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-3" id="exchangeGroup"><label for="exchangeInput" class="form-label">Tipo de cambio</label><input id="exchangeInput" type="number" min="0.000001" step="0.000001" value="1" class="form-control" readonly></div>
-                            <div id="paymentMethodGroup" class="col-md-6<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label class="form-label">Método de pago</label><input class="form-control invoice-readonly" readonly value="PUE · Pago en una sola exhibición"><select id="paymentMethodSelect" class="d-none" required aria-hidden="true" tabindex="-1"><?php foreach (($catalogos['metodos_pago'] ?? []) as $metodo): ?><option value="<?= (int) $metodo['id'] ?>" data-clave="<?= htmlspecialchars((string) $metodo['clave']) ?>" selected><?= htmlspecialchars($metodo['clave'] . ' · ' . $metodo['descripcion']) ?></option><?php endforeach; ?></select></div>
-                            <div id="paymentFormGroup" class="<?= $facturaCompletaInicial ? 'col-md-6' : 'col-12' ?>"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select></div>
+                            <div id="paymentMethodGroup" class="col-md-6<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="paymentMethodSelect" class="form-label">Método de pago</label><select id="paymentMethodSelect" class="form-select" required><?php foreach (($catalogos['metodos_pago'] ?? []) as $metodo): ?><option value="<?= (int) $metodo['id'] ?>" data-clave="<?= htmlspecialchars((string) $metodo['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['metodo_pago_id'] === (int) $metodo['id'] : $metodo['clave'] === 'PUE') ? 'selected' : '' ?>><?= htmlspecialchars($metodo['clave'] . ' · ' . $metodo['descripcion']) ?></option><?php endforeach; ?></select></div>
+                            <div id="paymentFormGroup" class="<?= $facturaCompletaInicial ? 'col-md-6' : 'col-12' ?>"><label for="paymentFormSelect" class="form-label">Forma de pago</label><select id="paymentFormSelect" class="form-select" required><?php foreach (($catalogos['formas_pago'] ?? []) as $forma): ?><option value="<?= (int) $forma['id'] ?>" data-clave="<?= htmlspecialchars((string) $forma['clave']) ?>" <?= ($modoEdicion ? (int) $facturaPendiente['forma_pago_id'] === (int) $forma['id'] : $forma['clave'] === '03') ? 'selected' : '' ?>><?= htmlspecialchars($forma['clave'] . ' · ' . $forma['descripcion']) ?></option><?php endforeach; ?></select><small id="paymentFormHelp" class="text-muted d-none">Para PPD se utiliza 99 · Por definir.</small></div>
                             <div id="cfdiUseGroup" class="col-md-7<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="cfdiUseSelect" class="form-label">Uso CFDI</label><select id="cfdiUseSelect" class="form-select" required><option value="">Seleccionar uso...</option><?php foreach (($catalogos['usos_cfdi'] ?? []) as $uso): ?><option value="<?= htmlspecialchars((string) $uso['clave']) ?>" data-fisica="<?= !empty($uso['fisica']) ? '1' : '0' ?>" data-moral="<?= !empty($uso['moral']) ? '1' : '0' ?>" <?= ($modoEdicion ? (string) $facturaPendiente['uso_cfdi'] === (string) $uso['clave'] : $uso['clave'] === 'G03') ? 'selected' : '' ?>><?= htmlspecialchars($uso['clave'] . ' · ' . $uso['descripcion']) ?></option><?php endforeach; ?></select></div>
                             <div class="col-md-5 invoice-advanced-field<?= $facturaCompletaInicial ? '' : ' d-none' ?>"><label for="exportSelect" class="form-label">Exportación</label><select id="exportSelect" class="form-select" required <?= $modoEdicion ? 'disabled' : '' ?>><?php foreach (($catalogos['exportaciones'] ?? []) as $exportacion): ?><option value="<?= htmlspecialchars((string) $exportacion['clave']) ?>"><?= htmlspecialchars($exportacion['clave'] . ' · ' . $exportacion['descripcion']) ?></option><?php endforeach; ?></select><?php if ($modoEdicion): ?><small class="text-muted">El esquema actual solo permite conservar 01.</small><?php endif; ?></div>
                             <div id="vatRateGroup" class="<?= $facturaCompletaInicial ? 'col-md-4' : 'col-12' ?>">
@@ -305,6 +305,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const paymentMethodSelect = document.getElementById('paymentMethodSelect');
     const paymentFormGroup = document.getElementById('paymentFormGroup');
     const paymentFormSelect = document.getElementById('paymentFormSelect');
+    const paymentFormHelp = document.getElementById('paymentFormHelp');
     const useSelect = document.getElementById('cfdiUseSelect');
     const useGroup = document.getElementById('cfdiUseGroup');
     const invoiceTypeSwitch = document.getElementById('invoiceTypeSwitch');
@@ -346,6 +347,8 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     let savingEdit = false;
     let stampingEdit = false;
     let stampResultUncertain = false;
+    let lastImmediatePaymentForm = [...paymentFormSelect.options].find(option => option.selected && !['30', '99'].includes(option.dataset.clave))?.value
+        || [...paymentFormSelect.options].find(option => !['30', '99'].includes(option.dataset.clave))?.value || '';
 
     prefacturaPdfFrame.addEventListener('load', () => {
         prefacturaPdfLoader.classList.remove('d-flex');
@@ -472,6 +475,24 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         return invoiceTypeSwitch.checked;
     }
 
+    function syncPaymentMethod() {
+        const deferred = isCompleteInvoice() && selectedCode(paymentMethodSelect) === 'PPD';
+        if (deferred) {
+            if (!['30', '99'].includes(selectedCode(paymentFormSelect))) {
+                lastImmediatePaymentForm = paymentFormSelect.value;
+            }
+            const undefinedForm = [...paymentFormSelect.options].find(option => option.dataset.clave === '99');
+            if (undefinedForm) paymentFormSelect.value = undefinedForm.value;
+        } else if (['30', '99'].includes(selectedCode(paymentFormSelect))) {
+            paymentFormSelect.value = lastImmediatePaymentForm;
+        }
+        [...paymentFormSelect.options].forEach(option => {
+            option.disabled = deferred ? option.dataset.clave !== '99' : ['30', '99'].includes(option.dataset.clave);
+        });
+        paymentFormSelect.disabled = deferred;
+        paymentFormHelp.classList.toggle('d-none', !deferred);
+    }
+
     function applyInvoiceType() {
         const complete = isCompleteInvoice();
         invoiceTypeLabel.textContent = complete ? 'Factura avanzada' : 'Factura sencilla';
@@ -490,6 +511,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             if (pueOption) paymentMethodSelect.value = pueOption.value;
             useSelect.value = 'G03';
         }
+        syncPaymentMethod();
         updateVatDisplay();
         calculate();
     }
@@ -864,6 +886,15 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         applyInvoiceType();
     });
     invoiceTypeSwitch.addEventListener('change', updateSaveAvailability);
+    paymentMethodSelect.addEventListener('change', () => {
+        syncPaymentMethod();
+        updateSaveAvailability();
+    });
+    paymentFormSelect.addEventListener('change', () => {
+        if (!['30', '99'].includes(selectedCode(paymentFormSelect))) {
+            lastImmediatePaymentForm = paymentFormSelect.value;
+        }
+    });
     grossTotalSwitch.addEventListener('change', () => {
         unitPriceHeading.textContent = grossTotalSwitch.checked ? 'Precio unitario (IVA incluido)' : 'Precio unitario';
         validatedPayload = null;

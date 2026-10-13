@@ -8,6 +8,14 @@ final class ComplementoPagoValidacionException extends RuntimeException
 {
 }
 
+final class ComplementoPagoPersistenciaException extends RuntimeException
+{
+    public function __construct(public readonly string $etapa, PDOException $causa)
+    {
+        parent::__construct('Falló la operación de base de datos del complemento.', 0, $causa);
+    }
+}
+
 final class ComplementoPagoAdministrador
 {
     private int $empresa;
@@ -103,26 +111,34 @@ final class ComplementoPagoAdministrador
             $montos[$id] = $monto;
         }
         ksort($montos, SORT_NUMERIC);
-        $this->exigirPerfil($clienteId, $perfilId);
-        $this->exigirFormaPago($formaId);
-
-        // El token permite recuperar la misma alta si el navegador reintenta la solicitud.
-        $nombreBloqueo = 'complemento-pago-' . $this->empresa . '-' . $token;
-        $bloqueo = $this->conexion->prepare('SELECT GET_LOCK(:nombre, 5)');
-        $bloqueo->execute([':nombre' => $nombreBloqueo]);
-        if ((int) $bloqueo->fetchColumn() !== 1) {
-            throw new ComplementoPagoValidacionException('Hay otra solicitud en proceso. Inténtalo de nuevo.');
-        }
+        $etapa = 'validar el perfil fiscal del cliente';
         try {
+            $this->exigirPerfil($clienteId, $perfilId);
+            $etapa = 'validar la forma de pago';
+            $this->exigirFormaPago($formaId);
+
+            // El token permite recuperar la misma alta si el navegador reintenta la solicitud.
+            $etapa = 'bloquear la solicitud para evitar duplicados';
+            $nombreBloqueo = 'complemento-pago-' . $this->empresa . '-' . $token;
+            $bloqueo = $this->conexion->prepare('SELECT GET_LOCK(:nombre, 5)');
+            $bloqueo->execute([':nombre' => $nombreBloqueo]);
+            if ((int) $bloqueo->fetchColumn() !== 1) {
+                throw new ComplementoPagoValidacionException('Hay otra solicitud en proceso. Inténtalo de nuevo.');
+            }
+            try {
+            $etapa = 'comprobar si el complemento ya fue guardado';
             $existente = $this->buscarPorToken($token, $clienteId);
             if ($existente !== null) return $existente;
+            $etapa = 'iniciar la transacción';
             $this->conexion->beginTransaction();
             try {
                 $relaciones = [];
                 $totalCentavos = 0;
                 foreach ($montos as $facturaId => $montoCentavos) {
+                    $etapa = 'consultar y bloquear la factura relacionada';
                     $fila = $this->facturaBloqueada($facturaId, $clienteId, $perfilId);
                     $totalFactura = $this->aCentavos($fila['total_iva'] ?? $fila['xml_total'] ?? $fila['total_factura'] ?? 0);
+                    $etapa = 'consultar el saldo y las parcialidades previas';
                     $consultaPagos = $this->conexion->prepare(
                         'SELECT COALESCE(SUM(monto), 0) AS pagado, COALESCE(MAX(num_pago), 0) AS ultimo
                          FROM facturar_rel_complementos WHERE id_factura = :factura'
@@ -145,11 +161,13 @@ final class ComplementoPagoAdministrador
                     ];
                     $totalCentavos += $montoCentavos;
                 }
+                $etapa = 'consultar los catálogos de método y moneda';
                 $metodo = (int) $this->conexion->query("SELECT id FROM metodos_pago WHERE UPPER(TRIM(clave)) = 'PUE' ORDER BY id LIMIT 1")->fetchColumn();
                 $moneda = (int) $this->conexion->query("SELECT id FROM catalogo_monedas WHERE UPPER(TRIM(clave_moneda)) = 'MXN' ORDER BY id LIMIT 1")->fetchColumn();
                 if ($metodo <= 0 || $moneda <= 0) {
                     throw new RuntimeException('Faltan los catálogos de PUE o MXN para el complemento.');
                 }
+                $etapa = 'insertar el comprobante pendiente';
                 $insertar = $this->conexion->prepare(
                     "INSERT INTO facturas_complementos
                         (fecha, nombre, metodo_pago, moneda, forma_pago, status_pago, total_factura,
@@ -166,8 +184,10 @@ final class ComplementoPagoAdministrador
                     ':fecha_pago' => $fecha->format('Y-m-d H:i:00'),
                 ]);
                 $complementoId = (int) $this->conexion->lastInsertId();
+                $etapa = 'asignar el folio al comprobante';
                 $actualizarFolio = $this->conexion->prepare('UPDATE facturas_complementos SET folio = :folio WHERE id = :id');
                 $actualizarFolio->execute([':folio' => $complementoId, ':id' => $complementoId]);
+                $etapa = 'insertar las facturas relacionadas y sus pagos';
                 $insertarRelacion = $this->conexion->prepare(
                     'INSERT INTO facturar_rel_complementos
                         (id_factura, id_complemento, monto, num_pago, saldo, restante, uuid_rel, folio, serie, fecha_pago)
@@ -182,15 +202,24 @@ final class ComplementoPagoAdministrador
                         ':serie' => $relacion['serie'], ':fecha_pago' => $fecha->format('Y-m-d H:i:00'),
                     ]);
                 }
+                $etapa = 'confirmar la transacción';
                 $this->conexion->commit();
                 return ['id' => $complementoId, 'folio' => 'P-' . $complementoId, 'total' => $totalCentavos / 100];
             } catch (Throwable $error) {
                 if ($this->conexion->inTransaction()) $this->conexion->rollBack();
                 throw $error;
             }
-        } finally {
-            $liberar = $this->conexion->prepare('SELECT RELEASE_LOCK(:nombre)');
-            $liberar->execute([':nombre' => $nombreBloqueo]);
+            } finally {
+                try {
+                    $liberar = $this->conexion->prepare('SELECT RELEASE_LOCK(:nombre)');
+                    $liberar->execute([':nombre' => $nombreBloqueo]);
+                } catch (PDOException $error) {
+                    $etapa = 'liberar el bloqueo de la solicitud';
+                    throw $error;
+                }
+            }
+        } catch (PDOException $error) {
+            throw new ComplementoPagoPersistenciaException($etapa, $error);
         }
     }
 
