@@ -16,18 +16,18 @@ final class ComplementoDocumentoServicio
         'https://sistema14.com/app/api/xml/firmados-comp/',
         'https://old.sistema14.com/xml/firmados-comp/',
         'https://sistema14.com/api/xml/firmados-comp/',
-        'https://sistema14.com/xml/firmados-comp/',
         'https://ultra.sistema14.com/api/xml/sinfirma-comp/',
         'https://sistema14.com/dev/app/api/xml/sinfirma-comp/',
         'https://sistema14.com/app/api/xml/sinfirma-comp/',
         'https://old.sistema14.com/xml/sinfirma-comp/',
         'https://sistema14.com/api/xml/sinfirma-comp/',
-        'https://sistema14.com/xml/sinfirma-comp/',
-        'https://ultra.sistema14.com/api/xml/firmados/',
-        'https://sistema14.com/app/api/xml/firmados/',
-        'https://old.sistema14.com/xml/firmados/',
-        'https://sistema14.com/api/xml/firmados/',
-        'https://sistema14.com/xml/firmados/',
+    ];
+    private const FUENTES_XML_SIN_FIRMA = [
+        'https://ultra.sistema14.com/api/xml/sinfirma-comp/',
+        'https://sistema14.com/dev/app/api/xml/sinfirma-comp/',
+        'https://sistema14.com/app/api/xml/sinfirma-comp/',
+        'https://old.sistema14.com/xml/sinfirma-comp/',
+        'https://sistema14.com/api/xml/sinfirma-comp/',
     ];
     private const FUENTES_PDF = [
         'https://old.sistema14.com/gen_fact_complemento_pdf.php?id=',
@@ -54,7 +54,7 @@ final class ComplementoDocumentoServicio
         }
         $consulta = $this->conexion->prepare(
             'SELECT fc.id, fc.uuid, fc.xml_firmado, fc.token, fc.serie, fc.folio, fc.id_pago,
-                    e.razon AS empresa_nombre
+                    rc.uuid_rel, e.rfc AS empresa_rfc, e.razon AS empresa_nombre
              FROM facturar_rel_complementos rc
              INNER JOIN facturas_complementos fc ON fc.id = rc.id_complemento
              INNER JOIN empresas e ON e.id = fc.razon
@@ -112,6 +112,50 @@ final class ComplementoDocumentoServicio
                 if ($contenido !== null && $this->esXmlEsperado($contenido, $uuid)) {
                     return $contenido;
                 }
+            }
+        }
+        return null;
+    }
+
+    /** @param array<string,mixed> $complemento @return array{contenido:string,firmado:bool}|null */
+    public function obtenerXmlParaVista(array $complemento): ?array
+    {
+        $firmado = $this->obtenerXml($complemento);
+        if ($firmado !== null) {
+            return ['contenido' => $firmado, 'firmado' => true];
+        }
+
+        $id = (int) $complemento['id'];
+        $nombre = 'XML-factura-' . $id . '.xml';
+        $xmlBase = trim((string) ($complemento['xml_firmado'] ?? ''));
+        if ($xmlBase !== '' && $this->esXmlSinFirmaEsperado($xmlBase, $complemento)) {
+            return ['contenido' => $xmlBase, 'firmado' => false];
+        }
+
+        $directorios = array_merge(
+            array_filter(self::DIRECTORIOS_XML_EXTERNOS, static fn(string $ruta): bool => str_contains($ruta, 'sinfirma-comp')),
+            array_map(
+                fn(string $ruta): string => $this->raizProyecto . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $ruta),
+                ['api/xml/sinfirma-comp', 'xml/sinfirma-comp']
+            )
+        );
+        foreach ($directorios as $directorio) {
+            $ruta = $directorio . DIRECTORY_SEPARATOR . $nombre;
+            if (is_file($ruta) && filesize($ruta) <= 2097152) {
+                $contenido = file_get_contents($ruta);
+                if (is_string($contenido) && $this->esXmlSinFirmaEsperado($contenido, $complemento)) {
+                    return ['contenido' => $contenido, 'firmado' => false];
+                }
+            }
+        }
+
+        $limite = microtime(true) + 12;
+        foreach (self::FUENTES_XML_SIN_FIRMA as $base) {
+            $restante = $limite - microtime(true);
+            if ($restante < 1) break;
+            $contenido = $this->descargar($base . rawurlencode($nombre), 2097152, min(4, (int) ceil($restante)));
+            if ($contenido !== null && $this->esXmlSinFirmaEsperado($contenido, $complemento)) {
+                return ['contenido' => $contenido, 'firmado' => false];
             }
         }
         return null;
@@ -229,6 +273,43 @@ final class ComplementoDocumentoServicio
             $xpath = new DOMXPath($documento);
             $uuidXml = (string) $xpath->evaluate('string(//*[local-name()="TimbreFiscalDigital"]/@UUID)');
             return strtoupper(trim($uuidXml)) === strtoupper(trim($uuid));
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($anterior);
+        }
+    }
+
+    /** @param array<string,mixed> $complemento */
+    private function esXmlSinFirmaEsperado(string $contenido, array $complemento): bool
+    {
+        $anterior = libxml_use_internal_errors(true);
+        $documento = new DOMDocument();
+        try {
+            if (!$documento->loadXML($contenido, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)
+                || !$documento->documentElement instanceof DOMElement
+                || $documento->documentElement->localName !== 'Comprobante'
+                || strtoupper($documento->documentElement->getAttribute('TipoDeComprobante')) !== 'P') {
+                return false;
+            }
+            $xpath = new DOMXPath($documento);
+            if (trim((string) $xpath->evaluate('string(//*[local-name()="TimbreFiscalDigital"]/@UUID)')) !== '') {
+                return false;
+            }
+            $uuidRelacionado = strtoupper(trim((string) ($complemento['uuid_rel'] ?? '')));
+            if ($uuidRelacionado !== '') {
+                $documentos = $xpath->query('//*[local-name()="DoctoRelacionado"]/@IdDocumento');
+                if ($documentos !== false) {
+                    foreach ($documentos as $documentoRelacionado) {
+                        if (strtoupper(trim($documentoRelacionado->nodeValue ?? '')) === $uuidRelacionado) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            $rfcEmisor = strtoupper(trim((string) $xpath->evaluate('string(//*[local-name()="Emisor"]/@Rfc)')));
+            $rfcEmpresa = strtoupper(trim((string) ($complemento['empresa_rfc'] ?? '')));
+            return $rfcEmpresa !== '' && $rfcEmisor === $rfcEmpresa;
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($anterior);
