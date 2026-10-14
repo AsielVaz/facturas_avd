@@ -39,19 +39,24 @@ try {
         throw new AutenticacionException('La llave de acceso no es válida.');
     }
 
-    // Formato del servicio emisor: id,fecha,tipo,cliente,nombre,email.
-    $campos = explode(',', $contenido);
-    if (count($campos) !== 6) {
+    // Formato actual: id,fecha,tipo,cliente,nombre,email,imagen,permisos.
+    // El límite conserva las comas que pueda contener el campo permisos.
+    $campos = explode(',', $contenido, 8);
+    if (count($campos) !== 6 && count($campos) !== 8) {
         throw new AutenticacionException('La llave de acceso no tiene el formato esperado.');
     }
-    [$id, $fecha, $tipo, $cliente, $nombre, $email] = array_map('trim', $campos);
+    [$id, $fecha, $tipo, $cliente, $nombre, $email, $imagen, $permisos] =
+        array_pad(array_map('trim', $campos), 8, '');
     if (preg_match('/^[1-9][0-9]*$/D', $id) !== 1
         || preg_match('/^[1-9][0-9]*$/D', $cliente) !== 1
         || $fecha !== date('Y-m-d')
-        || $tipo === '' || $nombre === '' || $email === '') {
+        || $tipo === '' || $nombre === '' || $email === ''
+        || strlen($imagen) > 1024 || strlen($permisos) > 1024) {
         throw new AutenticacionException('La llave de acceso está vencida o contiene datos inválidos.');
     }
 
+    // La imagen y los permisos del token son datos informativos. La sesión
+    // obtiene imagen, tipo y empresas autorizadas de la base local.
     Autenticacion::iniciarSesionConClaveExterna(
         Conexion::obtener(), (int) $id, (int) $cliente, $tipo, $email
     );
