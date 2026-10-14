@@ -7,6 +7,8 @@ require_once __DIR__ . '/api/ComplementoPagoConsulta.php';
 
 Autenticacion::exigirPagina();
 $empresa = SesionEmpresa::empresaActual();
+SesionEmpresa::iniciar();
+$_SESSION['complemento_timbrado_csrf'] ??= bin2hex(random_bytes(32));
 $consultaComplementos = new ComplementoPagoConsulta(Conexion::obtener(), $empresa);
 $esc = static fn(mixed $valor): string => htmlspecialchars(is_scalar($valor) ? (string) $valor : '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $clienteLegible = static function (mixed $valor): string {
@@ -82,7 +84,7 @@ require __DIR__ . '/templates/page-start.php';
         <?php if (!empty($detalle['uuid'])): ?><div class="d-flex gap-2 align-self-start">
             <button class="btn btn-sm btn-soft-secondary js-view-complement" type="button" data-pdf-url="api/complemento-pdf.php?id=<?= (int) $detalle['id'] ?>&amp;vista=1" data-folio="<?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?>" title="Ver PDF" aria-label="Ver PDF del complemento"><i data-lucide="eye" class="fs-16"></i></button>
             <a class="btn btn-sm btn-soft-primary" href="api/complemento-documentos.php?id=<?= (int) $detalle['id'] ?>" title="Descargar XML y PDF" aria-label="Descargar XML y PDF del complemento"><i data-lucide="folder-down" class="fs-16"></i></a>
-        </div><?php else: ?><span class="badge bg-warning-subtle text-warning">Pendiente · sin timbrar</span><?php endif; ?>
+        </div><?php elseif ((string) $detalle['status'] === 'Pendiente'): ?><button class="btn btn-sm btn-outline-success js-timbrar-complemento" type="button" data-id="<?= (int) $detalle['id'] ?>" data-folio="<?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?>"><i data-lucide="badge-check" class="fs-16 me-1"></i>Timbrar</button><?php else: ?><span class="badge bg-warning-subtle text-warning">Sin timbrar</span><?php endif; ?>
     </div>
     <div class="card-body">
         <div class="row g-4">
@@ -92,7 +94,8 @@ require __DIR__ . '/templates/page-start.php';
                 <dt class="col-sm-5">UUID</dt><dd class="col-sm-7 text-break"><?= $esc(trim((string) ($detalle['uuid'] ?? '')) ?: 'Sin timbrar') ?></dd>
                 <dt class="col-sm-5">Estado registrado</dt><dd class="col-sm-7"><?= $esc($detalle['status'] ?: 'Sin estado') ?></dd>
                 <dt class="col-sm-5">Fecha del comprobante</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_complemento'])) ?></dd>
-                <dt class="col-sm-5">Fecha de timbrado</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_timbrado'])) ?></dd></dl>
+                <dt class="col-sm-5">Fecha de timbrado</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_timbrado'])) ?></dd>
+                <?php if (trim((string) ($detalle['status_error'] ?? '')) !== ''): ?><dt class="col-sm-5">Último error</dt><dd class="col-sm-7 text-warning"><?= $esc($detalle['status_error']) ?></dd><?php endif; ?></dl>
             </div></div>
             <div class="col-md-6"><div class="border rounded p-3 h-100"><h6>Pago</h6>
                 <dl class="row mb-0"><dt class="col-sm-5">Fecha de pago</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_pago'])) ?></dd>
@@ -150,7 +153,7 @@ require __DIR__ . '/templates/page-start.php';
                     <?php if (!empty($fila['uuid'])): ?>
                     <button class="btn btn-sm btn-soft-secondary js-view-complement" type="button" data-pdf-url="api/complemento-pdf.php?id=<?= (int) $fila['id'] ?>&amp;vista=1" data-folio="<?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>" title="Ver PDF" aria-label="Ver PDF del complemento <?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>"><i data-lucide="eye" class="fs-16"></i></button>
                     <a class="btn btn-sm btn-soft-primary" href="api/complemento-documentos.php?id=<?= (int) $fila['id'] ?>" title="Descargar XML y PDF" aria-label="Descargar XML y PDF del complemento <?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>"><i data-lucide="folder-down" class="fs-16"></i></a>
-                    <?php else: ?><span class="text-muted small">Sin documentos fiscales</span><?php endif; ?>
+                    <?php elseif ((string) $fila['status'] === 'Pendiente'): ?><button class="btn btn-sm btn-outline-success js-timbrar-complemento" type="button" data-id="<?= (int) $fila['id'] ?>" data-folio="<?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>" title="Timbrar complemento" aria-label="Timbrar complemento <?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?>"><i data-lucide="badge-check" class="fs-16"></i></button><?php else: ?><span class="text-muted small">Sin documentos fiscales</span><?php endif; ?>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -181,9 +184,44 @@ require __DIR__ . '/templates/page-start.php';
     </div>
 </div>
 <?php
-$pageScripts = <<<'HTML'
+$configuracionTimbrado = json_encode(['csrf' => $_SESSION['complemento_timbrado_csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+$pageScripts = '<script>window.complementoTimbradoConfig=' . $configuracionTimbrado . ';</script>' . <<<'HTML'
 <script>
 (() => {
+    document.querySelectorAll('.js-timbrar-complemento').forEach(button => {
+        button.addEventListener('click', async () => {
+            const folio = button.dataset.folio || 'el complemento';
+            const confirmar = window.Swal
+                ? (await Swal.fire({icon: 'question', title: '¿Timbrar ' + folio + '?',
+                    text: 'Se enviará al PAC y, si se acepta, tendrá validez fiscal.',
+                    showCancelButton: true, confirmButtonText: 'Sí, timbrar', cancelButtonText: 'Cancelar'})).isConfirmed
+                : confirm('¿Timbrar ' + folio + '? Se enviará al PAC.');
+            if (!confirmar) return;
+            button.disabled = true;
+            try {
+                const respuesta = await fetch('api/complementos-pago-timbrar.php', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                    body: JSON.stringify({id: Number(button.dataset.id), csrf: window.complementoTimbradoConfig.csrf}),
+                });
+                const contenido = await respuesta.text();
+                let datos;
+                try { datos = JSON.parse(contenido); } catch {
+                    throw new Error('El servidor respondió HTTP ' + respuesta.status + ' sin JSON válido. Revisa el registro PHP.');
+                }
+                if (!respuesta.ok || !datos.ok) throw new Error(datos.error || 'El timbrado no se completó.');
+                if (window.Swal) await Swal.fire({icon: 'success', title: 'Complemento timbrado',
+                    text: 'UUID: ' + datos.uuid});
+                else alert('Complemento timbrado. UUID: ' + datos.uuid);
+                location.reload();
+            } catch (error) {
+                const mensaje = error instanceof Error ? error.message : 'No se pudo timbrar el complemento.';
+                if (window.Swal) await Swal.fire({icon: 'error', title: 'No se pudo timbrar', text: mensaje});
+                else alert(mensaje);
+                button.disabled = false;
+            }
+        });
+    });
     const element = document.getElementById('complementoPdfModal');
     const frame = document.getElementById('complementoPdfFrame');
     const loader = document.getElementById('complementoPdfLoader');

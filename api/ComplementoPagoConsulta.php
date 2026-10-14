@@ -51,7 +51,7 @@ final class ComplementoPagoConsulta
         }
         $consulta = $this->conexion->prepare(
             'SELECT fc.id, fc.serie AS serie_complemento, fc.folio AS folio_complemento,
-                    fc.uuid, fc.status, fc.fecha AS fecha_complemento, fc.fecha_timbrado,
+                    fc.uuid, fc.status, fc.status_error, fc.fecha AS fecha_complemento, fc.fecha_timbrado,
                     fc.fecha_pago, fc.total_factura, fc.nombre AS cliente_id,
                     COALESCE(NULLIF(cc.razon_social, \'\'), NULLIF(c.razon_social, \'\'), NULLIF(c.nombre, \'\'), CONCAT(\'Cliente #\', fc.nombre)) AS cliente
              ' . $this->tablasBase() . ' WHERE fc.razon = :empresa AND fc.id = :id LIMIT 1'

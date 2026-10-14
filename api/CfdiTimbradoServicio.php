@@ -187,6 +187,40 @@ final class CfdiTimbradoServicio
         return $metadatos;
     }
 
+    /**
+     * Comparte el transporte del PAC con otros CFDI 4.0 (por ejemplo Pagos 2.0).
+     * No modifica ninguna factura: el llamador valida y persiste su comprobante.
+     *
+     * @return array{xml:string,metadatos:array<string,string>,ambiente:string}
+     */
+    public function timbrarXml(string $xml, string $rfc, string $usuarioPac, string $passwordPac): array
+    {
+        if (trim($xml) === '' || trim($rfc) === '' || trim($usuarioPac) === '' || $passwordPac === '') {
+            throw new CfdiTimbradoException('Faltan el XML o las credenciales del emisor para timbrar.');
+        }
+        $ambiente = $this->obtenerAmbiente();
+        $baseUrl = $ambiente === 'pruebas' ? self::URL_SANDBOX : self::URL_PRODUCCION;
+        $autenticacion = $this->enviarJson($baseUrl . '/AutenticaUsuario', [
+            'Rfc' => $rfc, 'Usuario' => $usuarioPac, 'Password' => $passwordPac,
+        ]);
+        $token = trim((string) ($autenticacion['Mensaje'] ?? ''));
+        if ($token === '') {
+            throw new CfdiTimbradoException('IOFacturo no devolvió un token de autenticación.');
+        }
+        $respuesta = $this->enviarJson($baseUrl . '/TimbrarDocumento', [
+            'Comprobante' => $xml, 'Token' => $token,
+        ]);
+        if (!array_key_exists('DatoAdicional', $respuesta)
+            || !$this->respuestaPacExitosa($respuesta['DatoAdicional'])) {
+            throw new CfdiTimbradoException($this->mensajePac($respuesta, 'IOFacturo rechazó el CFDI sin proporcionar el motivo.'));
+        }
+        $firmado = trim((string) ($respuesta['Mensaje'] ?? ''));
+        if ($firmado === '') {
+            throw new CfdiTimbradoException($this->mensajePac($respuesta, 'IOFacturo no devolvió el XML timbrado.'));
+        }
+        return ['xml' => $firmado, 'metadatos' => $this->analizarXmlTimbrado($firmado, $rfc), 'ambiente' => $ambiente];
+    }
+
     /** @return array<string, mixed> */
     private function obtenerFacturaYCredenciales(int $facturaId, int $empresaId): array
     {

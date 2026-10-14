@@ -7,6 +7,7 @@ require_once __DIR__ . '/api/ComplementoPagoAdministrador.php';
 Autenticacion::exigirPagina();
 SesionEmpresa::iniciar();
 $_SESSION['complemento_pago_csrf'] ??= bin2hex(random_bytes(32));
+$_SESSION['complemento_timbrado_csrf'] ??= bin2hex(random_bytes(32));
 $error = '';
 $contexto = ['clientes' => [], 'formas_pago' => []];
 try {
@@ -24,7 +25,7 @@ require __DIR__ . '/templates/page-start.php';
 
 <?php if ($error !== ''): ?><div class="alert alert-danger"><?= $esc($error) ?></div><?php endif; ?>
 <div class="alert alert-warning">
-    Este formulario guarda el complemento como <strong>pendiente</strong>. No genera XML fiscal ni lo envía a timbrar.
+    Puedes guardar el complemento como <strong>pendiente</strong> para timbrarlo después, o guardarlo y enviarlo al PAC ahora.
 </div>
 
 <form id="complementoForm" novalidate>
@@ -80,7 +81,10 @@ require __DIR__ . '/templates/page-start.php';
     <div class="card">
         <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div><small class="text-muted d-block">Monto total recibido</small><strong id="totalPago" class="fs-22">$0.00</strong></div>
-            <button id="guardarComplemento" class="btn btn-primary" type="submit" disabled><i data-lucide="save" class="fs-17 me-1"></i>Guardar complemento pendiente</button>
+            <div class="d-flex flex-wrap gap-2">
+                <button id="guardarComplemento" class="btn btn-primary" type="submit" disabled><i data-lucide="save" class="fs-17 me-1"></i>Guardar complemento pendiente</button>
+                <button id="guardarYTimbrar" class="btn btn-outline-success" type="submit" disabled><i data-lucide="badge-check" class="fs-17 me-1"></i>Guardar y timbrar</button>
+            </div>
         </div>
     </div>
 </form>
@@ -88,6 +92,7 @@ require __DIR__ . '/templates/page-start.php';
 <?php
 $configuracion = json_encode([
     'csrf' => $_SESSION['complemento_pago_csrf'],
+    'csrfTimbrado' => $_SESSION['complemento_timbrado_csrf'],
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script>' . <<<'HTML'
 <script>
@@ -101,9 +106,13 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const total = document.getElementById('totalPago');
     const contador = document.getElementById('contadorFacturas');
     const guardar = document.getElementById('guardarComplemento');
+    const guardarYTimbrar = document.getElementById('guardarYTimbrar');
+    const textoGuardar = guardar.innerHTML;
+    const textoTimbrar = guardarYTimbrar.innerHTML;
     const dinero = value => new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'}).format(value);
     const idSolicitud = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     let solicitudActual = 0;
+    let enProceso = false;
 
     function aviso(texto, diagnostico = null) {
         const detalles = [texto];
@@ -166,7 +175,9 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         });
         contador.textContent = cantidad + ' seleccionada' + (cantidad === 1 ? '' : 's');
         total.textContent = dinero(suma);
-        guardar.disabled = !cantidad || !cliente.value || !perfil.value || !forma.value || !fecha.value;
+        const deshabilitar = enProceso || !cantidad || !cliente.value || !perfil.value || !forma.value || !fecha.value;
+        guardar.disabled = deshabilitar;
+        guardarYTimbrar.disabled = deshabilitar;
     }
     function mostrarFacturas(facturas) {
         body.replaceChildren();
@@ -240,7 +251,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     fecha.addEventListener('change', actualizarTotal);
     form.addEventListener('submit', async event => {
         event.preventDefault();
-        if (guardar.disabled) return;
+        if (enProceso || (guardar.disabled && guardarYTimbrar.disabled)) return;
+        const timbrarAlGuardar = event.submitter === guardarYTimbrar;
         const facturas = [];
         for (const tr of body.querySelectorAll('tr[data-factura-id]')) {
             if (!tr.querySelector('input[type=checkbox]').checked) continue;
@@ -249,8 +261,9 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             facturas.push({factura_id: Number(tr.dataset.facturaId), monto: monto.value});
         }
         if (!facturas.length) return aviso('Selecciona al menos una factura.');
-        guardar.disabled = true;
-        guardar.textContent = 'Guardando...';
+        enProceso = true;
+        actualizarTotal();
+        (timbrarAlGuardar ? guardarYTimbrar : guardar).textContent = 'Guardando...';
         try {
             const response = await fetch('api/complementos-pago-crear.php', {
                 method: 'POST', credentials: 'same-origin',
@@ -265,12 +278,37 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                 error.diagnostico = payload;
                 throw error;
             }
-            if (window.Swal) await Swal.fire({icon: 'success', title: 'Complemento guardado',
-                text: payload.complemento.folio + ' quedó pendiente, sin timbrar.'});
+            if (timbrarAlGuardar) {
+                guardarYTimbrar.textContent = 'Timbrando...';
+                try {
+                    const respuestaTimbrado = await fetch('api/complementos-pago-timbrar.php', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                        body: JSON.stringify({id: payload.complemento.id, csrf: window.complementoConfig.csrfTimbrado}),
+                    });
+                    const timbrado = await leerRespuesta(respuestaTimbrado, 'timbrar el complemento');
+                    if (!respuestaTimbrado.ok || !timbrado.ok) throw new Error(timbrado.error || 'El PAC no pudo timbrar el complemento.');
+                    if (window.Swal) await Swal.fire({icon: 'success', title: 'Complemento timbrado',
+                        text: 'UUID: ' + timbrado.uuid});
+                    else alert('Complemento timbrado. UUID: ' + timbrado.uuid);
+                } catch (error) {
+                    const mensaje = payload.complemento.folio + ' sí quedó guardado. No se completó el timbrado: '
+                        + (error instanceof Error ? error.message : 'Revisa el detalle del complemento.');
+                    if (window.Swal) await Swal.fire({icon: 'error', title: 'Guardado, sin confirmar timbrado', text: mensaje});
+                    else alert(mensaje);
+                }
+            } else if (window.Swal) {
+                await Swal.fire({icon: 'success', title: 'Complemento guardado',
+                    text: payload.complemento.folio + ' quedó pendiente, sin timbrar.'});
+            } else {
+                alert(payload.complemento.folio + ' quedó pendiente, sin timbrar.');
+            }
             window.location.assign('complementos-pago.php?id=' + encodeURIComponent(payload.complemento.id));
         } catch (error) {
-            aviso(error.message || 'No fue posible guardar el complemento.', error.diagnostico);
-            guardar.textContent = 'Guardar complemento pendiente';
+            await aviso(error.message || 'No fue posible guardar el complemento.', error.diagnostico);
+            guardar.innerHTML = textoGuardar;
+            guardarYTimbrar.innerHTML = textoTimbrar;
+            enProceso = false;
             actualizarTotal();
         }
     });
