@@ -110,6 +110,29 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const textoGuardar = guardar.innerHTML;
     const textoTimbrar = guardarYTimbrar.innerHTML;
     const dinero = value => new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'}).format(value);
+    const formatoMonto = value => new Intl.NumberFormat('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(value);
+    const montoNumerico = input => Number(input.value.replaceAll(',', ''));
+    function separarMiles(input) {
+        const anterior = input.value;
+        const posicion = input.selectionStart ?? anterior.length;
+        const caracteresAntes = anterior.slice(0, posicion).replaceAll(',', '').length;
+        const limpio = anterior.replace(/[^\d.]/g, '');
+        if (limpio === '') {
+            input.value = '';
+            return;
+        }
+        const partes = limpio.split('.');
+        const entero = partes[0].replace(/^0+(?=\d)/, '') || '0';
+        const decimales = partes.length > 1 ? '.' + partes.slice(1).join('').slice(0, 2) : '';
+        input.value = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimales;
+        let nuevaPosicion = 0;
+        let caracteres = 0;
+        while (nuevaPosicion < input.value.length && caracteres < caracteresAntes) {
+            if (input.value[nuevaPosicion] !== ',') caracteres++;
+            nuevaPosicion++;
+        }
+        input.setSelectionRange(nuevaPosicion, nuevaPosicion);
+    }
     const idSolicitud = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     let solicitudActual = 0;
     let enProceso = false;
@@ -160,13 +183,13 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         let cantidad = 0;
         body.querySelectorAll('tr[data-factura-id]').forEach(tr => {
             const check = tr.querySelector('input[type=checkbox]');
-            const monto = tr.querySelector('input[type=number]');
+            const monto = tr.querySelector('.monto-pagado');
             const restante = tr.querySelector('.saldo-restante');
             const saldo = Number(tr.dataset.saldo);
             monto.disabled = !check.checked;
             if (check.checked) {
                 cantidad++;
-                const pagado = Number(monto.value) || 0;
+                const pagado = montoNumerico(monto) || 0;
                 if (pagado > 0 && pagado <= saldo) suma += pagado;
                 restante.textContent = dinero(Math.max(0, saldo - pagado));
             } else {
@@ -204,18 +227,21 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             agregar(dinero(factura.saldo));
             agregar(String(factura.siguiente_parcialidad));
             const monto = document.createElement('input');
-            monto.type = 'number';
-            monto.className = 'form-control form-control-sm';
-            monto.min = '0.01';
-            monto.max = String(factura.saldo);
-            monto.step = '0.01';
-            monto.value = Number(factura.saldo).toFixed(2);
+            monto.type = 'text';
+            monto.inputMode = 'decimal';
+            monto.className = 'form-control form-control-sm monto-pagado';
+            monto.value = formatoMonto(Number(factura.saldo));
             monto.disabled = true;
             monto.setAttribute('aria-label', 'Monto pagado de ' + factura.folio);
             agregar('').appendChild(monto);
             agregar(dinero(factura.saldo), 'saldo-restante');
             seleccion.addEventListener('change', actualizarTotal);
-            monto.addEventListener('input', actualizarTotal);
+            monto.addEventListener('input', () => { separarMiles(monto); actualizarTotal(); });
+            monto.addEventListener('blur', () => {
+                const pagado = montoNumerico(monto);
+                if (monto.value !== '' && Number.isFinite(pagado)) monto.value = formatoMonto(pagado);
+                actualizarTotal();
+            });
             body.appendChild(tr);
         });
         actualizarTotal();
@@ -256,9 +282,14 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         const facturas = [];
         for (const tr of body.querySelectorAll('tr[data-factura-id]')) {
             if (!tr.querySelector('input[type=checkbox]').checked) continue;
-            const monto = tr.querySelector('input[type=number]');
-            if (!monto.checkValidity()) return aviso('Revisa el monto pagado de cada factura seleccionada.');
-            facturas.push({factura_id: Number(tr.dataset.facturaId), monto: monto.value});
+            const monto = tr.querySelector('.monto-pagado');
+            const valor = monto.value.replaceAll(',', '');
+            const pagado = Number(valor);
+            if (!/^\d+(?:\.\d{1,2})?$/.test(valor) || !Number.isFinite(pagado)
+                || pagado <= 0 || pagado > Number(tr.dataset.saldo)) {
+                return aviso('Revisa el monto pagado de cada factura seleccionada.');
+            }
+            facturas.push({factura_id: Number(tr.dataset.facturaId), monto: pagado.toFixed(2)});
         }
         if (!facturas.length) return aviso('Selecciona al menos una factura.');
         enProceso = true;
