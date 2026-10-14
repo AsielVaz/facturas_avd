@@ -236,6 +236,40 @@ final class Autenticacion
         self::completarSesion($conexion, $usuario);
     }
 
+    /** Inicia una sesión local a partir de una identidad externa ya desencriptada. */
+    public static function iniciarSesionConClaveExterna(
+        PDO $conexion,
+        int $usuarioId,
+        int $clienteId,
+        string $tipo,
+        string $email
+    ): void {
+        if ($usuarioId <= 0 || $clienteId <= 0 || trim($tipo) === '' || trim($email) === '') {
+            throw new AutenticacionException('La identidad externa no es válida.');
+        }
+
+        $consulta = $conexion->prepare(
+            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen, cliente
+             FROM usuarios WHERE id = :usuario LIMIT 1'
+        );
+        $consulta->execute([':usuario' => $usuarioId]);
+        $usuario = $consulta->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($usuario)
+            || (int) ($usuario['cliente'] ?? 0) !== $clienteId
+            || !hash_equals(trim((string) ($usuario['tipo'] ?? '')), trim($tipo))
+            || !hash_equals(
+                strtolower(trim((string) ($usuario['email'] ?? ''))),
+                strtolower(trim($email))
+            )) {
+            throw new AutenticacionException('La identidad externa no coincide con una cuenta disponible.');
+        }
+
+        SesionEmpresa::iniciar();
+        unset($_SESSION['empresa_actual'], $_SESSION['clave_actual'],
+            $_SESSION['logo_actual'], $_SESSION['empresa_actual_nombre']);
+        self::completarSesion($conexion, $usuario);
+    }
+
     public static function cancelarSegundoFactor(): void
     {
         SesionEmpresa::iniciar();
