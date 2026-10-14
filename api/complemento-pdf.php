@@ -7,9 +7,9 @@ require_once __DIR__ . '/ComplementoDocumentoServicio.php';
 Autenticacion::exigirApi();
 
 try {
-    $relacionId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
+    $complementoId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
     $servicio = new ComplementoDocumentoServicio(Conexion::obtener(), dirname(__DIR__));
-    $complemento = $servicio->obtener($relacionId, SesionEmpresa::empresaActual());
+    $complemento = $servicio->obtener($complementoId, SesionEmpresa::empresaActual());
     $pdf = $servicio->obtenerPdf($complemento);
     if ($pdf === null) {
         throw new RuntimeException('No se encontró el PDF del complemento.');

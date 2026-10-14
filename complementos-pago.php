@@ -33,6 +33,7 @@ $pagina = max(1, filter_input(INPUT_GET, 'pagina', FILTER_VALIDATE_INT) ?: 1);
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 $error = '';
 $detalle = null;
+$relaciones = [];
 $listado = ['filas' => [], 'total' => 0, 'pagina' => 1, 'paginas' => 1, 'por_pagina' => 25];
 
 try {
@@ -41,6 +42,8 @@ try {
         if ($detalle === null) {
             http_response_code(404);
             $error = 'No se encontró el complemento en la empresa activa.';
+        } else {
+            $relaciones = $consultaComplementos->relaciones($id);
         }
     } else {
         $listado = $consultaComplementos->listar($buscar, $desde, $hasta, $pagina);
@@ -75,7 +78,7 @@ require __DIR__ . '/templates/page-start.php';
 <?php if ($detalle): ?>
 <div class="card">
     <div class="card-header d-flex flex-wrap justify-content-between gap-2">
-        <div><h5 class="mb-1">Complemento <?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?></h5><span class="text-muted">Registro de pago #<?= (int) $detalle['id'] ?></span></div>
+        <div><h5 class="mb-1">Complemento <?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?></h5><span class="text-muted">Complemento #<?= (int) $detalle['id'] ?></span></div>
         <?php if (!empty($detalle['uuid'])): ?><div class="d-flex gap-2 align-self-start">
             <button class="btn btn-sm btn-soft-secondary js-view-complement" type="button" data-pdf-url="api/complemento-pdf.php?id=<?= (int) $detalle['id'] ?>&amp;vista=1" data-folio="<?= $esc($folio($detalle['serie_complemento'], $detalle['folio_complemento'])) ?>" title="Ver PDF" aria-label="Ver PDF del complemento"><i data-lucide="eye" class="fs-16"></i></button>
             <a class="btn btn-sm btn-soft-primary" href="api/complemento-documentos.php?id=<?= (int) $detalle['id'] ?>" title="Descargar XML y PDF" aria-label="Descargar XML y PDF del complemento"><i data-lucide="folder-down" class="fs-16"></i></a>
@@ -91,16 +94,34 @@ require __DIR__ . '/templates/page-start.php';
                 <dt class="col-sm-5">Fecha del comprobante</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_complemento'])) ?></dd>
                 <dt class="col-sm-5">Fecha de timbrado</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_timbrado'])) ?></dd></dl>
             </div></div>
-            <div class="col-md-6"><div class="border rounded p-3 h-100"><h6>Pago relacionado</h6>
-                <dl class="row mb-0"><dt class="col-sm-5">Factura</dt><dd class="col-sm-7"><?= $esc($folio($detalle['serie_factura'], $detalle['folio_factura'])) ?><?= (int) $detalle['factura_disponible'] === 0 ? ' · No disponible en esta empresa' : '' ?></dd>
-                <dt class="col-sm-5">UUID relacionado</dt><dd class="col-sm-7 text-break"><?= $esc($detalle['uuid_rel'] ?: '—') ?></dd>
-                <dt class="col-sm-5">Número de pago</dt><dd class="col-sm-7"><?= $esc($detalle['num_pago'] ?: '—') ?></dd>
-                <dt class="col-sm-5">Fecha de pago</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_pago'])) ?></dd>
-                <dt class="col-sm-5">Monto pagado</dt><dd class="col-sm-7 fw-semibold"><?= $esc($moneda($detalle['monto'])) ?></dd>
-                <dt class="col-sm-5">Saldo anterior</dt><dd class="col-sm-7"><?= $esc($moneda($detalle['saldo'])) ?></dd>
-                <dt class="col-sm-5">Saldo restante</dt><dd class="col-sm-7"><?= $esc($moneda($detalle['restante'])) ?></dd></dl>
+            <div class="col-md-6"><div class="border rounded p-3 h-100"><h6>Pago</h6>
+                <dl class="row mb-0"><dt class="col-sm-5">Fecha de pago</dt><dd class="col-sm-7"><?= $esc($formatoFecha($detalle['fecha_pago'])) ?></dd>
+                <dt class="col-sm-5">Monto total</dt><dd class="col-sm-7 fw-semibold"><?= $esc($moneda($detalle['total_factura'])) ?></dd>
+                <dt class="col-sm-5">Facturas relacionadas</dt><dd class="col-sm-7"><?= count($relaciones) ?></dd></dl>
             </div></div>
         </div>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Facturas relacionadas</h5></div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Factura</th><th>UUID relacionado</th><th>Pago</th><th>Fecha de pago</th><th>Monto</th><th>Saldo anterior</th><th>Saldo restante</th></tr></thead>
+            <tbody>
+            <?php foreach ($relaciones as $relacion): ?>
+            <tr>
+                <td><?= $esc($folio($relacion['serie_factura'], $relacion['folio_factura'])) ?><?php if ((int) $relacion['factura_disponible'] === 0): ?><div class="text-warning small">Factura no disponible en esta empresa</div><?php endif; ?></td>
+                <td class="text-break"><?= $esc($relacion['uuid_rel'] ?: '—') ?></td>
+                <td><?= $esc($relacion['num_pago'] ?: '—') ?></td>
+                <td><?= $esc($formatoFecha($relacion['fecha_pago'])) ?></td>
+                <td><?= $esc($moneda($relacion['monto'])) ?></td>
+                <td><?= $esc($moneda($relacion['saldo'])) ?></td>
+                <td><?= $esc($moneda($relacion['restante'])) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            <?php if ($relaciones === []): ?><tr><td colspan="7" class="text-center text-muted py-4">Este complemento no tiene facturas relacionadas.</td></tr><?php endif; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 <?php else: ?>
@@ -115,17 +136,15 @@ require __DIR__ . '/templates/page-start.php';
     </div>
     <div class="table-responsive">
         <table class="table table-hover erp-table mb-0">
-            <thead><tr><th>Complemento</th><th>Factura relacionada</th><th>Cliente</th><th>Fecha de pago</th><th>Pago</th><th>Monto</th><th>Saldo restante</th><th>Estado</th><th class="text-end pe-3">Acciones</th></tr></thead>
+            <thead><tr><th>Complemento</th><th>Facturas relacionadas</th><th>Cliente</th><th>Fecha de pago</th><th>Monto</th><th>Estado</th><th class="text-end pe-3">Acciones</th></tr></thead>
             <tbody>
             <?php foreach ($listado['filas'] as $fila): ?>
             <tr>
                 <td><a href="?<?= $esc(http_build_query(['id' => $fila['id'], 'buscar' => $buscar, 'desde' => $desde, 'hasta' => $hasta, 'pagina' => $listado['pagina']])) ?>" class="fw-semibold"><?= $esc($folio($fila['serie_complemento'], $fila['folio_complemento'])) ?></a><div class="text-muted small text-truncate" style="max-width:170px" title="<?= $esc($fila['uuid']) ?>"><?= $esc($fila['uuid'] ?: 'Sin UUID') ?></div></td>
-                <td><?= $esc($folio($fila['serie_factura'], $fila['folio_factura'])) ?><?php if ((int) $fila['factura_disponible'] === 0): ?><div class="text-warning small">Factura no disponible</div><?php endif; ?></td>
+                <td><?php if ((int) $fila['facturas_count'] > 0): ?><?= $esc($folio($fila['serie_factura'], $fila['folio_factura'])) ?><?php if ((int) $fila['facturas_count'] > 1): ?><div class="text-muted small">y <?= (int) $fila['facturas_count'] - 1 ?> más</div><?php endif; ?><?php if ((int) $fila['factura_disponible'] === 0): ?><div class="text-warning small">Factura no disponible</div><?php endif; ?><?php else: ?><span class="text-muted">Sin facturas relacionadas</span><?php endif; ?></td>
                 <td><?= $esc($clienteLegible($fila['cliente'])) ?></td>
                 <td><?= $esc($formatoFecha($fila['fecha_pago'])) ?></td>
-                <td><?= $esc($fila['num_pago'] ?: '—') ?></td>
-                <td class="fw-semibold text-nowrap"><?= $esc($moneda($fila['monto'])) ?></td>
-                <td class="text-nowrap"><?= $esc($moneda($fila['restante'])) ?></td>
+                <td class="fw-semibold text-nowrap"><?= $esc($moneda($fila['total_factura'])) ?></td>
                 <td><?= $esc($fila['status'] ?: 'Sin estado') ?></td>
                 <td class="text-end pe-3 text-nowrap">
                     <?php if (!empty($fila['uuid'])): ?>
@@ -135,7 +154,7 @@ require __DIR__ . '/templates/page-start.php';
                 </td>
             </tr>
             <?php endforeach; ?>
-            <?php if ($listado['filas'] === []): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay complementos para esta empresa y estos filtros.</td></tr><?php endif; ?>
+            <?php if ($listado['filas'] === []): ?><tr><td colspan="7" class="text-center text-muted py-4">No hay complementos para esta empresa y estos filtros.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>

@@ -47,20 +47,22 @@ final class ComplementoDocumentoServicio
     }
 
     /** @return array<string,mixed> */
-    public function obtener(int $relacionId, int $empresaId): array
+    public function obtener(int $complementoId, int $empresaId): array
     {
-        if ($relacionId <= 0 || $empresaId <= 0) {
+        if ($complementoId <= 0 || $empresaId <= 0) {
             throw new RuntimeException('El complemento solicitado no es válido.');
         }
         $consulta = $this->conexion->prepare(
             'SELECT fc.id, fc.uuid, fc.xml_firmado, fc.token, fc.serie, fc.folio, fc.id_pago,
                     rc.uuid_rel, e.rfc AS empresa_rfc, e.razon AS empresa_nombre
-             FROM facturar_rel_complementos rc
-             INNER JOIN facturas_complementos fc ON fc.id = rc.id_complemento
+             FROM facturas_complementos fc
              INNER JOIN empresas e ON e.id = fc.razon
-             WHERE rc.id = :relacion AND fc.razon = :empresa LIMIT 1'
+             LEFT JOIN facturar_rel_complementos rc ON rc.id = (
+                 SELECT MIN(rel.id) FROM facturar_rel_complementos rel WHERE rel.id_complemento = fc.id
+             )
+             WHERE fc.id = :complemento AND fc.razon = :empresa LIMIT 1'
         );
-        $consulta->bindValue(':relacion', $relacionId, PDO::PARAM_INT);
+        $consulta->bindValue(':complemento', $complementoId, PDO::PARAM_INT);
         $consulta->bindValue(':empresa', $empresaId, PDO::PARAM_INT);
         $consulta->execute();
         $complemento = $consulta->fetch(PDO::FETCH_ASSOC);

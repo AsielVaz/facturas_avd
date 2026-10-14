@@ -8,9 +8,9 @@ Autenticacion::exigirApi();
 
 $rutaTemporal = null;
 try {
-    $relacionId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
+    $complementoId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
     $servicio = new ComplementoDocumentoServicio(Conexion::obtener(), dirname(__DIR__));
-    $complemento = $servicio->obtener($relacionId, SesionEmpresa::empresaActual());
+    $complemento = $servicio->obtener($complementoId, SesionEmpresa::empresaActual());
     $xml = $servicio->obtenerXml($complemento);
     if ($xml === null) {
         throw new RuntimeException('No se encontró el XML timbrado del complemento.');
