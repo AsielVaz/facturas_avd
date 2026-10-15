@@ -118,6 +118,7 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                                     class="text-muted"><?= htmlspecialchars(Autenticacion::tipoActual()) ?></small></span>
                         </span>
                     </a>
+                    <h1>hola</h1>
                     <div class="dropdown-menu dropdown-menu-end">
                         <a class="dropdown-item" href="empresas-s.php"><i data-lucide="building-2"
                                 class="fs-16 text-muted align-middle me-2"></i>Cambiar empresa</a>
