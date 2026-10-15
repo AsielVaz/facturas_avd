@@ -11,6 +11,14 @@ header('X-Content-Type-Options: nosniff');
 function responderErrorBanca(int $codigo, string $mensaje): never
 {
     http_response_code($codigo);
+    if (($_POST['diagnostico'] ?? null) === '1') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'estatus_guardado' => 'error',
+            'error' => $mensaje,
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+        exit;
+    }
     header('Content-Type: text/html; charset=utf-8');
     echo '<!doctype html><html lang="es"><meta charset="utf-8"><title>Acceso a Banca</title>';
     echo '<p>' . htmlspecialchars($mensaje, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
@@ -22,6 +30,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Allow: POST');
     responderErrorBanca(405, 'Método no permitido.');
 }
+
+$diagnostico = ($_POST['diagnostico'] ?? null) === '1';
 
 if (!Autenticacion::autenticado()) {
     responderErrorBanca(401, 'Tu sesión de Facturas expiró. Inicia sesión nuevamente.');
@@ -75,7 +85,32 @@ if (!is_array($respuesta) || !isset($respuesta['estatus']) || !is_string($respue
     responderErrorBanca(502, 'Banca devolvió una respuesta sin estatus válido.');
 }
 
-$_SESSION['banca_estatus'] = $respuesta['estatus'] === 'exito' ? 'exito' : 'error';
+$_SESSION['banca_estatus'] = $codigoHttp >= 200 && $codigoHttp < 300 && $respuesta['estatus'] === 'exito'
+    ? 'exito'
+    : 'error';
+if ($diagnostico) {
+    // Limitar el diagnóstico a campos conocidos; nunca guardar llaves ni tokens.
+    $respuestaVisible = array_intersect_key($respuesta, array_flip(['estatus', 'metodo', 'mensaje']));
+    foreach (['token', 'tokenApp'] as $campoSensible) {
+        if (array_key_exists($campoSensible, $respuesta)) {
+            $respuestaVisible[$campoSensible] = '[oculto]';
+        }
+    }
+    $archivoRelativo = 'tmp/banca-diagnostico-' . hash('sha256', session_id()) . '.txt';
+    $datosDiagnostico = [
+        'fecha' => date('c'),
+        'estatus_guardado' => $_SESSION['banca_estatus'],
+        'codigo_http_banca' => $codigoHttp,
+        'respuesta_banca' => $respuestaVisible,
+    ];
+    $textoDiagnostico = json_encode($datosDiagnostico, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+    $guardado = @file_put_contents(__DIR__ . '/' . $archivoRelativo, $textoDiagnostico . PHP_EOL, LOCK_EX);
+    header('Content-Type: application/json; charset=utf-8');
+    $datosDiagnostico['archivo_diagnostico'] = $guardado === false ? 'No se pudo guardar el TXT.' : $archivoRelativo;
+    echo json_encode($datosDiagnostico, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+    exit;
+}
+
 if ($codigoHttp < 200 || $codigoHttp >= 300 || $_SESSION['banca_estatus'] !== 'exito') {
     $mensaje = $respuesta['mensaje'] ?? null;
     responderErrorBanca(401, is_string($mensaje) && $mensaje !== ''
