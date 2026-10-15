@@ -11,16 +11,60 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
             <!-- Lado Izquierdo: Logo con mayor tamaño -->
             <div class="d-flex align-items-center gap-3">
                 <a href="facturas.php" class="navbar-brand d-flex align-items-center py-0">
-                    <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded" alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
+                    <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
+                        alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
-                <form action="https://banca.sistema14.com/api/login_externo.php" method="post" enctype="multipart/form-data" class="m-0">
+                <form id="formLoginBanca" action="https://banca.sistema14.com/api/login_externo.php" method="post"
+                    class="m-0">
                     <?php if ($bancaDisponible): ?>
-                        <input type="hidden" name="cadena_total" value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+                        <input type="hidden" name="cadena_total" id="cadena_total"
+                            value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
                     <?php endif; ?>
-                    <button type="submit" class="border-0 bg-transparent p-0 d-flex align-items-center" aria-label="Ir a Banca" title="<?= $bancaDisponible ? 'Ir a Banca' : 'Inicia sesión nuevamente para habilitar Banca' ?>" <?= $bancaDisponible ? '' : 'disabled' ?>>
-                        <img src="assets/images/banca_logo.png" class="rounded" alt="" style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
+                    <button type="submit" class="border-0 bg-transparent p-0 d-flex align-items-center"
+                        aria-label="Ir a Banca"
+                        title="<?= $bancaDisponible ? 'Ir a Banca' : 'Inicia sesión nuevamente para habilitar Banca' ?>"
+                        <?= $bancaDisponible ? '' : 'disabled' ?>>
+                        <img src="assets/images/banca_logo.png" class="rounded" alt=""
+                            style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
+
+                <script>
+                    document.getElementById('formLoginBanca').addEventListener('submit', async function (e) {
+                        e.preventDefault(); // Evitamos que el navegador recargue o envíe el formulario de forma clásica
+
+                        const inputCadena = document.getElementById('cadena_total');
+                        if (!inputCadena) return;
+
+                        // Preparamos los datos usando FormData (idéntico a form-data de Postman)
+                        const formData = new FormData();
+                        formData.append('cadena_total', inputCadena.value);
+
+                        try {
+                            // Realizamos la petición POST a la API externa
+                            const response = await fetch(this.action, {
+                                method: 'POST',
+                                body: formData
+                                // Nota: Al usar FormData, el navegador asigna automáticamente el Content-Type multipart/form-data con su boundary correcto.
+                            });
+
+                            // Intentamos parsear la respuesta como JSON
+                            const resultado = await response.json();
+
+                            // Validamos si la respuesta fue exitosa
+                            if (response.ok && resultado.estatus === 'exito') {
+                                // Si todo está bien, redirigimos a la URL solicitada
+                                window.location.href = 'https://banca.sistema14.com/';
+                            } else {
+                                // Manejo de errores devueltos por el servidor
+                                alert('Error al acceder a Banca: ' + (resultado.mensaje || 'Respuesta inválida'));
+                            }
+                        } catch (error) {
+                            console.error('Error en la petición:', error);
+                            alert('Ocurrió un error de conexión al intentar acceder a Banca.');
+                        }
+                    });
+                </script>
             </div>
 
             <!-- Lado Derecho: Elementos de usuario, notificaciones y tema -->
@@ -39,29 +83,29 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     </button>
                 </div>
                 <?php /* Notificaciones reservadas para una futura implementacion.
-                <div class="dropdown topbar-item">
-                    <button type="button" class="topbar-button" data-bs-toggle="dropdown" aria-expanded="false"
-                        aria-label="Notificaciones">
-                        <i data-lucide="bell"></i><span class="topbar-badge text-bg-danger rounded-pill">3</span>
-                    </button>
-                    <div class="dropdown-menu dropdown-menu-end dropdown-lg p-0">
-                        <div class="p-3 border-bottom">
-                            <h6 class="m-0 fs-16 fw-semibold">Notificaciones</h6>
-                        </div>
-                        <div class="p-2">
-                            <a href="facturas-pendientes.php" class="dropdown-item py-2 text-wrap"><span
-                                    class="badge bg-warning-subtle text-warning me-2">Factura</span> 4 facturas vencen
-                                esta semana.</a>
-                            <a href="inventario.php" class="dropdown-item py-2 text-wrap"><span
-                                    class="badge bg-danger-subtle text-danger me-2">Stock</span> 7 productos requieren
-                                reposicion.</a>
-                            <a href="banco-1.php" class="dropdown-item py-2 text-wrap"><span
-                                    class="badge bg-success-subtle text-success me-2">Banco</span> Se recibio un
-                                deposito por $48,250.</a>
-                        </div>
-                    </div>
-                </div>
-                */ ?>
+           <div class="dropdown topbar-item">
+               <button type="button" class="topbar-button" data-bs-toggle="dropdown" aria-expanded="false"
+                   aria-label="Notificaciones">
+                   <i data-lucide="bell"></i><span class="topbar-badge text-bg-danger rounded-pill">3</span>
+               </button>
+               <div class="dropdown-menu dropdown-menu-end dropdown-lg p-0">
+                   <div class="p-3 border-bottom">
+                       <h6 class="m-0 fs-16 fw-semibold">Notificaciones</h6>
+                   </div>
+                   <div class="p-2">
+                       <a href="facturas-pendientes.php" class="dropdown-item py-2 text-wrap"><span
+                               class="badge bg-warning-subtle text-warning me-2">Factura</span> 4 facturas vencen
+                           esta semana.</a>
+                       <a href="inventario.php" class="dropdown-item py-2 text-wrap"><span
+                               class="badge bg-danger-subtle text-danger me-2">Stock</span> 7 productos requieren
+                           reposicion.</a>
+                       <a href="banco-1.php" class="dropdown-item py-2 text-wrap"><span
+                               class="badge bg-success-subtle text-success me-2">Banco</span> Se recibio un
+                           deposito por $48,250.</a>
+                   </div>
+               </div>
+           </div>
+           */ ?>
                 <div class="dropdown topbar-item">
                     <a class="topbar-button p-0" href="#" data-bs-toggle="dropdown" aria-expanded="false">
                         <span class="d-flex align-items-center gap-2">
@@ -80,8 +124,8 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                         <a class="dropdown-item" href="complementos-pago.php"><i data-lucide="receipt-text"
                                 class="fs-16 text-muted align-middle me-2"></i>Complementos de pago</a>
                         <?php if (Autenticacion::puedeAdministrarClientes()): ?>
-                        <a class="dropdown-item" href="administrar-clientes.php"><i data-lucide="users-round"
-                                class="fs-16 text-muted align-middle me-2"></i>Administrar clientes</a>
+                            <a class="dropdown-item" href="administrar-clientes.php"><i data-lucide="users-round"
+                                    class="fs-16 text-muted align-middle me-2"></i>Administrar clientes</a>
                         <?php endif; ?>
                         <div class="dropdown-divider"></div>
                         <form method="post" action="logout.php"><input type="hidden" name="csrf"
