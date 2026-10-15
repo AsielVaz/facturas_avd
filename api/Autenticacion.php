@@ -21,6 +21,30 @@ final class Autenticacion
     private const MAX_INTENTOS_SEGUNDO_FACTOR = 5;
     private const HASH_FICTICIO = '$2y$12$fh6mO4nSt1ekMaD/nm3wfOxs281exSld8hpzPPfzCumb33s394ez6';
 
+    public static function cargarCifrador(string $funcion): bool
+    {
+        if (!in_array($funcion, ['encriptar', 'desencriptar'], true)) {
+            return false;
+        }
+        if (function_exists($funcion)) {
+            return true;
+        }
+        $rutaConfigurada = getenv('BANCA_ENCRIPTADOR_PATH');
+        foreach ([
+            is_string($rutaConfigurada) ? $rutaConfigurada : '',
+            __DIR__ . '/encriptador.php',
+            '/var/www/html/16/ultra/sistema/dev/app/api/encriptador.php',
+        ] as $ruta) {
+            if ($ruta !== '' && is_file($ruta) && is_readable($ruta)) {
+                require_once $ruta;
+                if (function_exists($funcion)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public static function autenticado(): bool
     {
         SesionEmpresa::iniciar();
@@ -111,7 +135,7 @@ final class Autenticacion
         self::validarLimite($conexion, $identificadorHash, $ipHash);
 
         $consulta = $conexion->prepare(
-            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, `2fa`
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, `2fa`
              FROM usuarios
              WHERE LOWER(TRIM(COALESCE(email, ''))) = :correo
                 OR LOWER(TRIM(COALESCE(usuario, ''))) = :usuario
@@ -188,7 +212,7 @@ final class Autenticacion
 
         $usuarioId = (int) $_SESSION['auth_2fa_usuario_id'];
         $consulta = $conexion->prepare(
-            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, `2fa`
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, `2fa`
              FROM usuarios WHERE id = :usuario LIMIT 1"
         );
         $consulta->execute([':usuario' => $usuarioId]);
@@ -224,7 +248,7 @@ final class Autenticacion
             throw new AutenticacionException('La cuenta de la passkey no está disponible.');
         }
         $consulta = $conexion->prepare(
-            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen FROM usuarios WHERE id = :usuario LIMIT 1'
+            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen, cliente FROM usuarios WHERE id = :usuario LIMIT 1'
         );
         $consulta->execute([':usuario' => $usuarioId]);
         $usuario = $consulta->fetch(PDO::FETCH_ASSOC);
@@ -267,7 +291,7 @@ final class Autenticacion
         SesionEmpresa::iniciar();
         unset($_SESSION['empresa_actual'], $_SESSION['clave_actual'],
             $_SESSION['logo_actual'], $_SESSION['empresa_actual_nombre']);
-        self::completarSesion($conexion, $usuario);
+        self::completarSesion($conexion, $usuario, false);
     }
 
     public static function cancelarSegundoFactor(): void
@@ -442,7 +466,7 @@ final class Autenticacion
     }
 
     /** @param array<string, mixed> $usuario */
-    private static function completarSesion(PDO $conexion, array $usuario): void
+    private static function completarSesion(PDO $conexion, array $usuario, bool $generarCadenaBanca = true): void
     {
         self::limpiarAutenticacion();
         session_regenerate_id(true);
@@ -464,6 +488,54 @@ final class Autenticacion
         $_SESSION['auth_regenerada'] = $ahora;
         $_SESSION['logout_csrf'] = bin2hex(random_bytes(32));
         self::seleccionarPrimeraEmpresaAsignada($conexion, (int) $usuario['id']);
+        if ($generarCadenaBanca) {
+            self::prepararCadenaBanca($usuario, $nombre);
+        }
+    }
+
+    /** @param array<string, mixed> $usuario */
+    private static function prepararCadenaBanca(array $usuario, string $nombre): void
+    {
+        $id = (int) ($usuario['id'] ?? 0);
+        $cliente = (int) ($usuario['cliente'] ?? 0);
+        $tipo = trim((string) ($usuario['tipo'] ?? ''));
+        $email = trim((string) ($usuario['email'] ?? ''));
+        if ($id <= 0 || $cliente <= 0 || $tipo === '' || $email === '' || $nombre === '') {
+            return;
+        }
+
+        if (!self::cargarCifrador('encriptar')) {
+            error_log('No se pudo preparar Banca: no hay un cifrador compatible disponible.');
+            return;
+        }
+
+        $limpiarCampo = static fn(string $campo): string => trim(str_replace([',', "\r", "\n"], ' ', $campo));
+        $fecha = date('Y-m-d');
+        $contenido = implode(',', [
+            (string) $id,
+            $fecha,
+            $limpiarCampo($tipo),
+            (string) $cliente,
+            $limpiarCampo($nombre),
+            $limpiarCampo($email),
+            $limpiarCampo((string) ($usuario['imagen'] ?? '')),
+            '', // Banca espera el campo permisos, aunque vaya vacío.
+        ]);
+        if (strlen($contenido) > 2048) {
+            error_log('No se pudo preparar Banca: los datos del usuario exceden el límite.');
+            return;
+        }
+
+        try {
+            $cadena = encriptar($contenido);
+            if (!is_string($cadena) || $cadena === '' || strlen($cadena) > 4096
+                || preg_match('/[\x00-\x20\x7F]/', $cadena) === 1) {
+                throw new RuntimeException('El cifrador devolvió una llave inválida.');
+            }
+            $_SESSION['cadena_total'] = $cadena;
+        } catch (Throwable $error) {
+            error_log('No se pudo preparar Banca: ' . $error::class . '.');
+        }
     }
 
     private static function validarCodigoTotp(string $secreto, string $codigo): ?int
@@ -680,7 +752,7 @@ final class Autenticacion
     private static function limpiarAutenticacion(): void
     {
         foreach (array_keys($_SESSION) as $clave) {
-            if ($clave === 'usuario_id' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
+            if ($clave === 'usuario_id' || $clave === 'cadena_total' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
                 unset($_SESSION[$clave]);
             }
         }

@@ -3,8 +3,6 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/api/Autenticacion.php';
-// Este archivo es compartido por el servicio emisor y el despliegue del ERP.
-require_once __DIR__ . '/encriptador.php';
 date_default_timezone_set(SesionEmpresa::ZONA_HORARIA);
 
 header('Content-Type: application/json; charset=utf-8');
@@ -34,6 +32,13 @@ if (!is_string($cadena) || $cadena === '' || strlen($cadena) > 4096) {
 }
 
 try {
+    if (!Autenticacion::cargarCifrador('desencriptar')) {
+        error_log('Login externo: no hay un cifrador compatible disponible.');
+        responderLoginExterno(503, [
+            'estatus' => 'error', 'metodo' => 'login14',
+            'mensaje' => 'El servicio de acceso externo no está configurado.',
+        ]);
+    }
     $contenido = desencriptar($cadena);
     if (!is_string($contenido) || strlen($contenido) > 2048) {
         throw new AutenticacionException('La llave de acceso no es válida.');
@@ -60,6 +65,7 @@ try {
     Autenticacion::iniciarSesionConClaveExterna(
         Conexion::obtener(), (int) $id, (int) $cliente, $tipo, $email
     );
+    $_SESSION['cadena_total'] = $cadena;
     responderLoginExterno(200, [
         'estatus' => 'exito',
         'metodo' => 'login14',

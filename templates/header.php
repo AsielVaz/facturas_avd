@@ -1,6 +1,9 @@
 <?php
 // Mantenemos la ruta del logo de la empresa
 $sidebarLogo = 'assets/images/logo.jpg';
+$cadenaBanca = $_SESSION['cadena_total'] ?? null;
+$bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
+    && strlen($cadenaBanca) <= 4096 && preg_match('/[\x00-\x20\x7F]/', $cadenaBanca) !== 1;
 ?>
 <header class="topbar d-flex align-items-center">
     <div class="container-fluid">
@@ -10,6 +13,14 @@ $sidebarLogo = 'assets/images/logo.jpg';
                 <a href="facturas.php" class="navbar-brand d-flex align-items-center py-0">
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded" alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
+                <form action="https://banca.sistema14.com/api/login_externo.php" method="post" enctype="multipart/form-data" class="m-0">
+                    <?php if ($bancaDisponible): ?>
+                        <input type="hidden" name="cadena_total" value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+                    <?php endif; ?>
+                    <button type="submit" class="border-0 bg-transparent p-0 d-flex align-items-center" aria-label="Ir a Banca" title="<?= $bancaDisponible ? 'Ir a Banca' : 'Inicia sesión nuevamente para habilitar Banca' ?>" <?= $bancaDisponible ? '' : 'disabled' ?>>
+                        <img src="assets/images/banca_logo.png" class="rounded" alt="" style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
+                    </button>
+                </form>
             </div>
 
             <!-- Lado Derecho: Elementos de usuario, notificaciones y tema -->
