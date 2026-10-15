@@ -15,75 +15,47 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
                 <form id="formLoginBanca" action="https://banca.sistema14.com/api/login_externo.php" method="post"
-                    enctype="multipart/form-data" target="_blank" rel="noopener" class="m-0">
+                    target="_blank" class="m-0">
                     <?php if ($bancaDisponible): ?>
                         <input type="hidden" name="cadena_total"
                             value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
                     <?php endif; ?>
                     <button type="submit" class="border-0 bg-transparent p-0 d-flex align-items-center"
-                        aria-label="Ir a Banca"
-                        title="<?= $bancaDisponible ? 'Ir a Banca' : 'Inicia sesión nuevamente para habilitar Banca' ?>"
-                        <?= $bancaDisponible ? '' : 'disabled' ?>>
+                        aria-label="Ir a Banca">
                         <img src="assets/images/banca_logo.png" class="rounded" alt=""
                             style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
-                <span
-                    class="badge <?= $bancaDisponible ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger' ?>"
-                    title="Indica si la llave está en la sesión de Facturas; no confirma que Banca la haya aceptado.">
-                    cadena_total:
-                    <?= $bancaDisponible ? 'presente (' . strlen($cadenaBanca) . ' caracteres)' : 'ausente o inválida' ?>
-                </span>
-                <pre id="bancaRespuestaDebug" class="small mb-0" role="status" hidden
-                    style="position:fixed;top:80px;left:20px;z-index:1050;max-width:min(90vw,650px);max-height:70vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#202a35;color:#e9edf3;border:1px solid #526070;border-radius:8px;"></pre>
+
                 <script>
-                    document.getElementById('formLoginBanca').addEventListener('submit', async function (evento) {
+                    document.getElementById('formLoginBanca').addEventListener('submit', function (evento) {
                         evento.preventDefault();
+
                         const salida = document.getElementById('bancaRespuestaDebug');
                         const boton = this.querySelector('button[type="submit"]');
-                        if (boton.disabled) return;
-                        boton.disabled = true;
-                        salida.hidden = false;
-                        salida.textContent = 'Consultando Banca…';
 
-                        // 1. Abrimos la pestaña en blanco de forma síncrona en el momento exacto del clic 
-                        // (esto evita que el navegador bloquee la ventana emergente).
-                        const pestana = window.open('', '_blank');
-                        if (pestana) pestana.opener = null;
+                        if (boton && boton.disabled) return;
+                        if (boton) boton.disabled = true;
 
-                        const datos = new FormData(this);
-                        datos.append('diagnostico', '1');
-
-                        try {
-                            // 2. Hacemos la petición POST al endpoint de login externo para iniciar la sesión
-                            const respuesta = await fetch('https://banca.sistema14.com/api/login_externo.php', {
-                                method: 'POST',
-                                body: datos,
-                                cache: 'no-store'
-                            });
-
-                            const contenido = await respuesta.text();
-                            const resultado = JSON.parse(contenido);
-                            salida.textContent = JSON.stringify(resultado, null, 2);
-                            console.log('Respuesta de Banca:', resultado.estatus);
-
-                            // 3. Evaluamos si el JSON devolvió el estatus de éxito que se ve en tu imagen
-                            if (resultado.estatus === 'exito') {
-                                if (pestana) {
-                                    // Redirigimos la pestaña en blanco que ya teníamos abierta hacia el sistema principal de la banca.
-                                    // Como el fetch anterior ya viajó y configuró la sesión/cookie, aquí entrará ya logueado.
-                                    pestana.location.href = 'https://banca.sistema14.com/';
-                                }
-                            } else {
-                                // Si el estatus no fue éxito, cerramos la pestaña en blanco para que no le estorbe al usuario
-                                if (pestana) pestana.close();
-                            }
-                        } catch (error) {
-                            if (pestana) pestana.close();
-                            salida.textContent = 'No se pudo conectar con la API de la banca.';
-                        } finally {
-                            boton.disabled = false;
+                        if (salida) {
+                            salida.hidden = false;
+                            salida.textContent = 'Consultando Banca y abriendo sesión…';
                         }
+
+                        // 1. Definimos un nombre único para la pestaña
+                        const nombreVentana = 'bancaPopupUnica';
+
+                        // 2. Configuramos el formulario para que abra la pestaña con el POST de la API
+                        this.target = nombreVentana;
+                        this.submit();
+
+                        // 3. Redirigimos la pestaña automáticamente a la raíz de la banca tras un breve momento
+                        setTimeout(() => {
+                            const pestanaBanca = window.open('https://banca.sistema14.com/', nombreVentana);
+                            if (pestanaBanca) pestanaBanca.focus();
+                            if (boton) boton.disabled = false;
+                            if (salida) salida.textContent = '¡Sesión abierta en otra pestaña!';
+                        }, 1200);
                     });
                 </script>
             </div>
@@ -106,24 +78,24 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                 <?php /* Notificaciones reservadas para una futura implementacion.
 <div class="dropdown topbar-item">
 <button type="button" class="topbar-button" data-bs-toggle="dropdown" aria-expanded="false"
-    aria-label="Notificaciones">
-    <i data-lucide="bell"></i><span class="topbar-badge text-bg-danger rounded-pill">3</span>
+aria-label="Notificaciones">
+<i data-lucide="bell"></i><span class="topbar-badge text-bg-danger rounded-pill">3</span>
 </button>
 <div class="dropdown-menu dropdown-menu-end dropdown-lg p-0">
-    <div class="p-3 border-bottom">
-        <h6 class="m-0 fs-16 fw-semibold">Notificaciones</h6>
-    </div>
-    <div class="p-2">
-        <a href="facturas-pendientes.php" class="dropdown-item py-2 text-wrap"><span
-                class="badge bg-warning-subtle text-warning me-2">Factura</span> 4 facturas vencen
-            esta semana.</a>
-        <a href="inventario.php" class="dropdown-item py-2 text-wrap"><span
-                class="badge bg-danger-subtle text-danger me-2">Stock</span> 7 productos requieren
-            reposicion.</a>
-        <a href="banco-1.php" class="dropdown-item py-2 text-wrap"><span
-                class="badge bg-success-subtle text-success me-2">Banco</span> Se recibio un
-            deposito por $48,250.</a>
-    </div>
+<div class="p-3 border-bottom">
+<h6 class="m-0 fs-16 fw-semibold">Notificaciones</h6>
+</div>
+<div class="p-2">
+<a href="facturas-pendientes.php" class="dropdown-item py-2 text-wrap"><span
+class="badge bg-warning-subtle text-warning me-2">Factura</span> 4 facturas vencen
+esta semana.</a>
+<a href="inventario.php" class="dropdown-item py-2 text-wrap"><span
+class="badge bg-danger-subtle text-danger me-2">Stock</span> 7 productos requieren
+reposicion.</a>
+<a href="banco-1.php" class="dropdown-item py-2 text-wrap"><span
+class="badge bg-success-subtle text-success me-2">Banco</span> Se recibio un
+deposito por $48,250.</a>
+</div>
 </div>
 </div>
 */ ?>
