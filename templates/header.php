@@ -14,7 +14,7 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
-                <form action="validar-banca.php" method="post" enctype="multipart/form-data" class="m-0">
+                <form action="validar-banca.php" method="post" enctype="multipart/form-data" target="_blank" rel="noopener" class="m-0">
                     <?php if ($bancaDisponible): ?>
                         <input type="hidden" name="cadena_total" value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
                     <?php endif; ?>
