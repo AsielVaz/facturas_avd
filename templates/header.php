@@ -14,11 +14,9 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
-                <form id="formLoginBanca" action="https://banca.sistema14.com/api/login_externo.php" method="post"
-                    class="m-0">
+                <form action="validar-banca.php" method="post" enctype="multipart/form-data" class="m-0">
                     <?php if ($bancaDisponible): ?>
-                        <input type="hidden" name="cadena_total" id="cadena_total"
-                            value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+                        <input type="hidden" name="cadena_total" value="<?= htmlspecialchars($cadenaBanca, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
                     <?php endif; ?>
                     <button type="submit" class="border-0 bg-transparent p-0 d-flex align-items-center"
                         aria-label="Ir a Banca"
@@ -28,43 +26,6 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
-
-                <script>
-                    document.getElementById('formLoginBanca').addEventListener('submit', async function (e) {
-                        e.preventDefault(); // Evitamos que el navegador recargue o envíe el formulario de forma clásica
-
-                        const inputCadena = document.getElementById('cadena_total');
-                        if (!inputCadena) return;
-
-                        // Preparamos los datos usando FormData (idéntico a form-data de Postman)
-                        const formData = new FormData();
-                        formData.append('cadena_total', inputCadena.value);
-
-                        try {
-                            // Realizamos la petición POST a la API externa
-                            const response = await fetch(this.action, {
-                                method: 'POST',
-                                body: formData
-                                // Nota: Al usar FormData, el navegador asigna automáticamente el Content-Type multipart/form-data con su boundary correcto.
-                            });
-
-                            // Intentamos parsear la respuesta como JSON
-                            const resultado = await response.json();
-
-                            // Validamos si la respuesta fue exitosa
-                            if (response.ok && resultado.estatus === 'exito') {
-                                // Si todo está bien, redirigimos a la URL solicitada
-                                window.location.href = 'https://banca.sistema14.com/';
-                            } else {
-                                // Manejo de errores devueltos por el servidor
-                                alert('Error al acceder a Banca: ' + (resultado.mensaje || 'Respuesta inválida'));
-                            }
-                        } catch (error) {
-                            console.error('Error en la petición:', error);
-                            alert('Ocurrió un error de conexión al intentar acceder a Banca.');
-                        }
-                    });
-                </script>
             </div>
 
             <!-- Lado Derecho: Elementos de usuario, notificaciones y tema -->

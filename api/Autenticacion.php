@@ -752,7 +752,7 @@ final class Autenticacion
     private static function limpiarAutenticacion(): void
     {
         foreach (array_keys($_SESSION) as $clave) {
-            if ($clave === 'usuario_id' || $clave === 'cadena_total' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
+            if ($clave === 'usuario_id' || $clave === 'cadena_total' || $clave === 'banca_estatus' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
                 unset($_SESSION[$clave]);
             }
         }
