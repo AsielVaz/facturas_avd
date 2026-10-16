@@ -14,6 +14,14 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
+                <button type="button" class="s14-system-btn" id="btnBanca" title="Banca" aria-label="Banca"
+                    onclick="return abrirBanca(this);">
+
+                    <img src="banca_logo.png" alt="" aria-hidden="true">
+
+                    <span class="s14-system-label">Banca</span>
+
+                </button>
                 <form id="formLoginBanca" action="https://banca.sistema14.com/api/login_externo.php" method="post"
                     target="_blank" class="m-0">
                     <?php if ($bancaDisponible): ?>
@@ -26,6 +34,70 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
+                <?php if ($bancaDisponible): ?>
+                    <script>
+                        // Enviar cadena_total en segundo plano una vez por llave y pestaña.
+                        (() => {
+                            const origen = document.querySelector('#formLoginBanca input[name="cadena_total"]');
+                            if (!origen) return;
+                            const marca = 'banca_auto_post_cadena';
+                            const identificador = <?= json_encode(hash('sha256', $cadenaBanca), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                            try {
+                                if (sessionStorage.getItem(marca) === identificador) return;
+                            } catch (error) {
+                                // Si el almacenamiento está deshabilitado, intentamos el POST igualmente.
+                            }
+
+                            const iframe = document.createElement('iframe');
+                            iframe.name = 'bancaAutoLogin_' + Date.now();
+                            iframe.title = 'Inicio automático de sesión en Banca';
+                            iframe.hidden = true;
+                            iframe.setAttribute('aria-hidden', 'true');
+                            iframe.src = 'about:blank';
+
+                            const formulario = document.createElement('form');
+                            formulario.method = 'POST';
+                            formulario.action = 'https://banca.sistema14.com/api/login_externo.php';
+                            formulario.enctype = 'multipart/form-data';
+                            formulario.target = iframe.name;
+                            formulario.style.display = 'none';
+                            formulario.acceptCharset = 'UTF-8';
+
+                            const campo = document.createElement('input');
+                            campo.type = 'hidden';
+                            campo.name = 'cadena_total';
+                            campo.value = origen.value;
+                            formulario.appendChild(campo);
+
+                            let fase = 0;
+                            const limpiar = () => {
+                                formulario.remove();
+                                iframe.remove();
+                            };
+                            const limite = setTimeout(limpiar, 20000);
+                            iframe.onload = () => {
+                                if (fase === 0) {
+                                    fase = 1;
+                                    try {
+                                        formulario.submit();
+                                    } catch (error) {
+                                        clearTimeout(limite);
+                                        limpiar();
+                                        return;
+                                    }
+                                    try { sessionStorage.setItem(marca, identificador); } catch (error) { }
+                                } else {
+                                    clearTimeout(limite);
+                                    limpiar();
+                                    // La carga terminó; el navegador no permite leer aquí el JSON de Banca.
+                                }
+                            };
+
+                            document.body.appendChild(formulario);
+                            document.body.appendChild(iframe);
+                        })();
+                    </script>
+                <?php endif; ?>
 
                 <script>
                     document.getElementById('formLoginBanca').addEventListener('submit', function (evento) {
@@ -58,6 +130,515 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                         }, 1200);
                     });
                 </script>
+
+                <script>
+                    // Se llama directamente desde onclick del botón Banca.
+                    // POST tradicional: no depende de fetch, AJAX ni permisos CORS.
+                    function abrirBanca(boton) {
+                        console.log('[Banca] Inicio de ejecución de abrirBanca()');
+
+                        if (boton.disabled) {
+                            console.warn('[Banca] El botón ya está deshabilitado. Se detiene la ejecución.');
+                            return false;
+                        }
+
+                        // Recuperamos el valor de la cadena total directamente de la sesión PHP para validarla en consola
+                        var cadenaTotal = <?php echo json_encode(
+                            isset($_SESSION['cadena_total']) ? (string) $_SESSION['cadena_total'] : '',
+                            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+                        ); ?>;
+
+                        console.log('[Banca] Valor de cadena_total:', cadenaTotal);
+
+                        if (!cadenaTotal) {
+                            console.error('[Banca] No se encontró la variable cadena_total en la sesión PHP.');
+                        }
+
+                        // Abrir la pestaña en el clic permite que el navegador no la bloquee.
+                        var nuevaPestana = window.open('about:blank', '_blank');
+
+                        if (!nuevaPestana) {
+                            console.error('[Banca] El navegador bloqueó la ventana emergente.');
+                            alert('Tu navegador bloqueó la pestaña de Banca. Permite ventanas emergentes para este sitio.');
+                            return false;
+                        }
+                        console.log('[Banca] Pestaña emergente abierta correctamente en blanco.');
+
+                        try {
+                            nuevaPestana.opener = null;
+                            nuevaPestana.document.title = 'Accediendo a Banca';
+                            nuevaPestana.document.body.style.cssText = 'font:16px Arial,sans-serif;padding:25px;';
+                            nuevaPestana.document.body.textContent = 'Iniciando sesión en Banca...';
+                            console.log('[Banca] Título y contenido inicial asignados a la nueva pestaña.');
+                        } catch (e) {
+                            console.warn('[Banca] No se pudo modificar el DOM de la nueva pestaña (posible restricción):', e);
+                        }
+
+                        boton.disabled = true;
+                        boton.setAttribute('aria-busy', 'true');
+
+                        // El formulario se envía a un iframe oculto. Cuando termina de cargar,
+                        // la pestaña nueva abre la página principal de Banca.
+                        var iframe = document.createElement('iframe');
+                        var nombreFrame = 's14LoginBanca_' + Date.now();
+                        iframe.name = nombreFrame;
+                        iframe.title = 'Inicio de sesión en Banca';
+                        iframe.style.display = 'none';
+                        iframe.setAttribute('aria-hidden', 'true');
+                        iframe.src = 'about:blank';
+
+                        var formulario = document.createElement('form');
+                        formulario.method = 'POST';
+                        formulario.action = 'https://banca.sistema14.com/api/login_externo.php';
+                        formulario.target = nombreFrame;
+                        formulario.style.display = 'none';
+                        formulario.acceptCharset = 'UTF-8';
+
+                        var campo = document.createElement('input');
+                        campo.type = 'hidden';
+                        campo.name = 'cadena_total';
+                        campo.value = cadenaTotal;
+                        formulario.appendChild(campo);
+
+                        console.log('[Banca] Formulario e iframe oculto creados con la acción:', formulario.action);
+
+                        var fase = 0;
+                        var terminado = false;
+                        var timeoutId;
+
+                        function limpiar() {
+                            if (terminado) return;
+                            terminado = true;
+                            clearTimeout(timeoutId);
+                            boton.disabled = false;
+                            boton.removeAttribute('aria-busy');
+                            if (formulario.parentNode) formulario.parentNode.removeChild(formulario);
+                            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                            console.log('[Banca] Limpieza de elementos temporales ejecutada.');
+                        }
+
+                        iframe.onload = function () {
+                            if (terminado) return;
+
+                            if (fase === 0) {
+                                // Primera carga: about:blank. Ahora enviamos el POST real.
+                                fase = 1;
+                                console.log('[Banca] Iframe cargado en about:blank (Fase 0). Enviando formulario POST...');
+                                try {
+                                    formulario.submit();
+                                    console.log('[Banca] Formulario enviado exitosamente al iframe.');
+                                } catch (error) {
+                                    console.error('[Banca] Error al enviar el formulario a Banca:', error);
+                                    limpiar();
+                                    try { nuevaPestana.close(); } catch (e) { }
+                                    alert('No fue posible enviar el inicio de sesión a Banca.');
+                                }
+                                return;
+                            }
+
+                            if (fase === 1) {
+                                // La petición POST terminó de navegar en el iframe.
+                                // Por políticas entre orígenes, no se puede validar la respuesta.
+                                console.log('[Banca] Iframe completó la carga del POST (Fase 1). Redirigiendo pestaña principal...');
+                                limpiar();
+
+                                if (!nuevaPestana.closed) {
+                                    nuevaPestana.location.replace('https://banca.sistema14.com/');
+                                    console.log('[Banca] Redirección aplicada a https://banca.sistema14.com/');
+                                } else {
+                                    console.warn('[Banca] La pestaña nueva fue cerrada por el usuario antes de redirigir.');
+                                }
+                            }
+                        };
+
+                        document.body.appendChild(formulario);
+                        document.body.appendChild(iframe);
+
+                        // Evitar que el botón quede bloqueado indefinidamente si no carga el iframe.
+                        timeoutId = setTimeout(function () {
+                            if (terminado) return;
+                            console.warn('[Banca] Tiempo de espera agotado (Timeout de 20s) para el iframe de Banca.');
+                            limpiar();
+                            try { nuevaPestana.close(); } catch (e) { }
+                            alert('No se pudo confirmar la carga del acceso a Banca. Vuelve a intentarlo.');
+                        }, 20000);
+
+                        return false;
+                    }
+
+                    // Facturación: envía primero el POST de autenticación y después abre el inicio.
+                    // La API actual responde JSON, por lo que el POST se procesa en un iframe oculto.
+                    function abrirFacturacion(boton) {
+                        console.log('[Facturación] Inicio de ejecución de abrirFacturacion()');
+
+                        if (boton.disabled) {
+                            console.warn('[Facturación] El botón ya está deshabilitado. Se detiene la ejecución.');
+                            return false;
+                        }
+
+                        var cadenaTotal = <?php echo json_encode(
+                            isset($_SESSION['cadena_total']) ? (string) $_SESSION['cadena_total'] : '',
+                            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+                        ); ?>;
+
+                        console.log('[Facturación] Valor de cadena_total:', cadenaTotal);
+
+                        if (!cadenaTotal) {
+                            console.error('[Facturación] No se encontró la variable cadena_total en la sesión PHP.');
+                            alert('No se encontró cadena_total en la sesión. Inicia sesión de nuevo.');
+                            return false;
+                        }
+
+                        // Debe abrirse durante el clic para evitar bloqueos de ventanas emergentes.
+                        var nuevaPestana = window.open('about:blank', '_blank');
+                        if (!nuevaPestana) {
+                            console.error('[Facturación] El navegador bloqueó la ventana emergente.');
+                            alert('Tu navegador bloqueó la pestaña de Facturación. Permite ventanas emergentes para este sitio.');
+                            return false;
+                        }
+                        console.log('[Facturación] Pestaña emergente abierta correctamente en blanco.');
+
+                        try {
+                            nuevaPestana.opener = null;
+                            nuevaPestana.document.title = 'Accediendo a Facturación';
+                            nuevaPestana.document.body.style.cssText = 'font:16px Arial,sans-serif;padding:25px;';
+                            nuevaPestana.document.body.textContent = 'Iniciando sesión en Facturación...';
+                            console.log('[Facturación] Título y contenido inicial asignados a la nueva pestaña.');
+                        } catch (e) {
+                            console.warn('[Facturación] No se pudo modificar el DOM de la nueva pestaña:', e);
+                        }
+
+                        boton.disabled = true;
+                        boton.setAttribute('aria-busy', 'true');
+
+                        var iframe = document.createElement('iframe');
+                        var nombreFrame = 's14LoginFacturacion_' + Date.now();
+                        iframe.name = nombreFrame;
+                        iframe.title = 'Inicio de sesión en Facturación';
+                        iframe.style.display = 'none';
+                        iframe.setAttribute('aria-hidden', 'true');
+                        iframe.src = 'about:blank';
+
+                        var formulario = document.createElement('form');
+                        formulario.method = 'POST';
+                        formulario.action = 'https://facturas.sistema14.com/login_externo.php';
+                        formulario.target = nombreFrame;
+                        formulario.style.display = 'none';
+                        formulario.acceptCharset = 'UTF-8';
+
+                        var campo = document.createElement('input');
+                        campo.type = 'hidden';
+                        campo.name = 'cadena_total';
+                        campo.value = cadenaTotal;
+                        formulario.appendChild(campo);
+
+                        console.log('[Facturación] Formulario e iframe oculto creados con la acción:', formulario.action);
+
+                        var fase = 0;
+                        var terminado = false;
+                        var timeoutId;
+
+                        function limpiar() {
+                            if (terminado) return;
+                            terminado = true;
+                            clearTimeout(timeoutId);
+                            boton.disabled = false;
+                            boton.removeAttribute('aria-busy');
+                            if (formulario.parentNode) formulario.parentNode.removeChild(formulario);
+                            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                            console.log('[Facturación] Limpieza de elementos temporales ejecutada.');
+                        }
+
+                        iframe.onload = function () {
+                            if (terminado) return;
+
+                            if (fase === 0) {
+                                // Primera carga about:blank: enviamos el login por POST.
+                                fase = 1;
+                                console.log('[Facturación] Iframe cargado en about:blank (Fase 0). Enviando formulario POST...');
+                                try {
+                                    formulario.submit();
+                                    console.log('[Facturación] Formulario enviado exitosamente al iframe.');
+                                } catch (error) {
+                                    console.error('[Facturación] Error al enviar el login de Facturación:', error);
+                                    limpiar();
+                                    try { nuevaPestana.close(); } catch (e) { }
+                                    alert('No fue posible enviar el inicio de sesión a Facturación.');
+                                }
+                                return;
+                            }
+
+                            if (fase === 1) {
+                                // Terminó de cargar el endpoint. No se puede leer su respuesta
+                                // por ser otro origen; la validación de sesión corresponde al destino.
+                                console.log('[Facturación] Iframe completó la carga del POST (Fase 1). Redirigiendo pestaña principal...');
+                                limpiar();
+
+                                if (!nuevaPestana.closed) {
+                                    nuevaPestana.location.replace('https://facturas.sistema14.com/');
+                                    console.log('[Facturación] Redirección aplicada a https://facturas.sistema14.com/');
+                                } else {
+                                    console.warn('[Facturación] La pestaña nueva fue cerrada por el usuario antes de redirigir.');
+                                }
+                            }
+                        };
+
+                        document.body.appendChild(formulario);
+                        document.body.appendChild(iframe);
+
+                        timeoutId = setTimeout(function () {
+                            if (terminado) return;
+                            console.warn('[Facturación] Tiempo de espera agotado (Timeout de 20s) para el iframe de Facturación.');
+                            limpiar();
+                            try { nuevaPestana.close(); } catch (e) { }
+                            alert('No se pudo confirmar la carga del acceso a Facturación. Vuelve a intentarlo.');
+                        }, 20000);
+
+                        return false;
+                    }
+                </script>
+
+                <style>
+                    #cornerLoader {
+
+                        /* //esquina izquierda */
+
+                        position: fixed;
+
+                        bottom: 20px;
+
+                        right: 20px;
+
+                        width: 60px;
+
+                        height: 60px;
+
+                        background: rgba(255, 255, 255, 0.9);
+
+                        border-radius: 50%;
+
+                        display: flex;
+
+                        /* visible por defecto */
+
+                        align-items: center;
+
+                        justify-content: center;
+
+                        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+
+                        z-index: 99999;
+
+                    }
+
+                    #cornerLoader img {
+
+                        width: 40px;
+
+                        height: 40px;
+
+                        animation: spin 1s linear infinite;
+
+                    }
+
+                    @keyframes spin {
+
+                        0% {
+
+                            transform: rotate(0deg);
+
+                        }
+
+                        100% {
+
+                            transform: rotate(360deg);
+
+                        }
+
+                    }
+
+                    .loader {
+
+                        --c: no-repeat linear-gradient(orange 0 0);
+
+                        background:
+
+                            var(--c), var(--c), var(--c),
+
+                            var(--c), var(--c), var(--c),
+
+                            var(--c), var(--c), var(--c);
+
+                        background-size: 16px 16px;
+
+                        animation:
+
+                            l32-1 1s infinite,
+
+                            l32-2 1s infinite;
+
+                    }
+
+                    @keyframes l32-1 {
+
+                        0%,
+
+                        100% {
+
+                            width: 45px;
+
+                            height: 45px
+                        }
+
+                        35%,
+
+                        65% {
+
+                            width: 65px;
+
+                            height: 65px
+                        }
+
+                    }
+
+                    @keyframes l32-2 {
+
+                        0%,
+
+                        40% {
+
+                            background-position: 0 0, 0 50%, 0 100%, 50% 100%, 100% 100%, 100% 50%, 100% 0, 50% 0, 50% 50%
+                        }
+
+                        60%,
+
+                        100% {
+
+                            background-position: 0 50%, 0 100%, 50% 100%, 100% 100%, 100% 50%, 100% 0, 50% 0, 0 0, 50% 50%
+                        }
+
+                    }
+
+                    .loader-overlay {
+
+                        position: fixed;
+
+                        top: 0;
+
+                        left: 0;
+
+                        width: 100%;
+
+                        height: 100%;
+
+                        background: #fff;
+
+                        /* fondo blanco */
+
+                        display: flex;
+
+                        justify-content: center;
+
+                        align-items: center;
+
+                        z-index: 9999;
+
+                        /* transición para el desvanecimiento */
+
+                        opacity: 1;
+
+                        visibility: visible;
+
+                        transition: opacity 0.5s ease, visibility 0.5s ease;
+
+                    }
+
+                    .loader-overlay.hide {
+
+                        opacity: 0;
+
+                        visibility: hidden;
+
+                    }
+
+                    /*
+
+  He añadido 'margin: 10px;' a la clase .custom-button
+
+  para separarlo de otros elementos (incluidos otros botones).
+
+*/
+
+                    .custom-button {
+
+                        /* Variables */
+
+                        --button_radius: 0.75em;
+
+                        --button_color: #e8e8e8;
+
+                        --button_outline_color: #000000;
+
+                        font-size: 17px;
+
+                        font-weight: bold;
+
+                        border: none;
+
+                        cursor: pointer;
+
+                        border-radius: var(--button_radius);
+
+                        background: var(--button_outline_color);
+
+                        /* ¡Nuevo! Agrega un margen de 10px a todos lados para separarlos */
+
+                        margin: 10px;
+
+                        display: inline-block;
+
+                    }
+
+                    .custom-button-top {
+
+                        color: #ffffff;
+
+                        display: block;
+
+                        white-space: nowrap;
+
+                        width: fit-content;
+
+                        box-sizing: border-box;
+
+                        border: 2px solid var(--button_outline_color);
+
+                        border-radius: var(--button_radius);
+
+                        padding: 0.75em 1.5em;
+
+                        background: var(--button_color);
+
+                        transform: translateY(-0.2em);
+
+                        transition: transform 0.1s ease;
+
+                    }
+
+                    /* Hover y Active se mantienen igual */
+
+                    .custom-button:hover .custom-button-top {
+
+                        transform: translateY(-0.33em);
+
+                    }
+
+                    .custom-button:active .custom-button-top {
+
+                        transform: translateY(0);
+
+                    }
+                </style>
             </div>
 
             <!-- Lado Derecho: Elementos de usuario, notificaciones y tema -->
