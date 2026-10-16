@@ -14,15 +14,7 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
-                <button type="button" class="s14-system-btn" id="btnBanca" title="Banca" aria-label="Banca"
-                    onclick="return abrirBanca(this);">
-
-                    <img src="banca_logo.png" alt="" aria-hidden="true">
-
-                    <span class="s14-system-label">Banca</span>
-
-                </button>
-                <form id="formLoginBanca" action="https://banca.sistema14.com/api/login_externo.php" method="post"
+                <form id="formLoginBanca" action="banca-puente.php" method="post"
                     target="_blank" class="m-0">
                     <?php if ($bancaDisponible): ?>
                         <input type="hidden" name="cadena_total"
@@ -34,103 +26,6 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
-                <?php if ($bancaDisponible): ?>
-                    <script>
-                        // Enviar cadena_total en segundo plano una vez por llave y pestaña.
-                        (() => {
-                            const origen = document.querySelector('#formLoginBanca input[name="cadena_total"]');
-                            if (!origen) return;
-                            const marca = 'banca_auto_post_cadena';
-                            const identificador = <?= json_encode(hash('sha256', $cadenaBanca), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-                            try {
-                                if (sessionStorage.getItem(marca) === identificador) return;
-                            } catch (error) {
-                                // Si el almacenamiento está deshabilitado, intentamos el POST igualmente.
-                            }
-
-                            const iframe = document.createElement('iframe');
-                            iframe.name = 'bancaAutoLogin_' + Date.now();
-                            iframe.title = 'Inicio automático de sesión en Banca';
-                            iframe.hidden = true;
-                            iframe.setAttribute('aria-hidden', 'true');
-                            iframe.src = 'about:blank';
-
-                            const formulario = document.createElement('form');
-                            formulario.method = 'POST';
-                            formulario.action = 'https://banca.sistema14.com/api/login_externo.php';
-                            formulario.enctype = 'multipart/form-data';
-                            formulario.target = iframe.name;
-                            formulario.style.display = 'none';
-                            formulario.acceptCharset = 'UTF-8';
-
-                            const campo = document.createElement('input');
-                            campo.type = 'hidden';
-                            campo.name = 'cadena_total';
-                            campo.value = origen.value;
-                            formulario.appendChild(campo);
-
-                            let fase = 0;
-                            const limpiar = () => {
-                                formulario.remove();
-                                iframe.remove();
-                            };
-                            const limite = setTimeout(limpiar, 20000);
-                            iframe.onload = () => {
-                                if (fase === 0) {
-                                    fase = 1;
-                                    try {
-                                        formulario.submit();
-                                    } catch (error) {
-                                        clearTimeout(limite);
-                                        limpiar();
-                                        return;
-                                    }
-                                    try { sessionStorage.setItem(marca, identificador); } catch (error) { }
-                                } else {
-                                    clearTimeout(limite);
-                                    limpiar();
-                                    // La carga terminó; el navegador no permite leer aquí el JSON de Banca.
-                                }
-                            };
-
-                            document.body.appendChild(formulario);
-                            document.body.appendChild(iframe);
-                        })();
-                    </script>
-                <?php endif; ?>
-
-                <script>
-                    document.getElementById('formLoginBanca').addEventListener('submit', function (evento) {
-                        evento.preventDefault();
-
-                        const salida = document.getElementById('bancaRespuestaDebug');
-                        const boton = this.querySelector('button[type="submit"]');
-
-                        if (boton && boton.disabled) return;
-                        if (boton) boton.disabled = true;
-
-                        if (salida) {
-                            salida.hidden = false;
-                            salida.textContent = 'Consultando Banca y abriendo sesión…';
-                        }
-
-                        // 1. Definimos un nombre único para la pestaña
-                        const nombreVentana = 'bancaPopupUnica';
-
-                        // 2. Configuramos el formulario para que abra la pestaña con el POST de la API
-                        this.target = nombreVentana;
-                        this.submit();
-
-                        // 3. Redirigimos la pestaña automáticamente a la raíz de la banca tras un breve momento
-                        setTimeout(() => {
-                            const pestanaBanca = window.open('https://banca.sistema14.com/', nombreVentana);
-                            if (pestanaBanca) pestanaBanca.focus();
-                            if (boton) boton.disabled = false;
-                            if (salida) salida.textContent = '¡Sesión abierta en otra pestaña!';
-                        }, 1200);
-                    });
-                </script>
-
                 <script>
                     // Se llama directamente desde onclick del botón Banca.
                     // POST tradicional: no depende de fetch, AJAX ni permisos CORS.
@@ -147,8 +42,6 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             isset($_SESSION['cadena_total']) ? (string) $_SESSION['cadena_total'] : '',
                             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
                         ); ?>;
-
-                        console.log('[Banca] Valor de cadena_total:', cadenaTotal);
 
                         if (!cadenaTotal) {
                             console.error('[Banca] No se encontró la variable cadena_total en la sesión PHP.');
@@ -280,8 +173,6 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             isset($_SESSION['cadena_total']) ? (string) $_SESSION['cadena_total'] : '',
                             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
                         ); ?>;
-
-                        console.log('[Facturación] Valor de cadena_total:', cadenaTotal);
 
                         if (!cadenaTotal) {
                             console.error('[Facturación] No se encontró la variable cadena_total en la sesión PHP.');
