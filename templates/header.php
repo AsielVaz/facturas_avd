@@ -4,6 +4,12 @@ $sidebarLogo = 'assets/images/logo.jpg';
 $cadenaBanca = $_SESSION['cadena_total'] ?? null;
 $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
     && strlen($cadenaBanca) <= 4096 && preg_match('/[\x00-\x20\x7F]/', $cadenaBanca) !== 1;
+$mostrarBotonBanca = is_array($_SESSION['uso_sistemas'] ?? null)
+    && (int) ($_SESSION['uso_sistemas'][1] ?? 0) === 1;
+
+$usoSistemaSesion = array_key_exists('uso_sistemas', $_SESSION)
+    ? var_export($_SESSION['uso_sistemas'], true)
+    : '(no definida)';
 ?>
 <header class="topbar d-flex align-items-center">
     <div class="container-fluid">
@@ -14,6 +20,7 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
+                <?php if ($mostrarBotonBanca): ?>
                 <form id="formLoginBanca" action="https://facturas.sistema14.com/banca-puente.php" method="post"
                     target="_blank" class="m-0">
                     <?php if ($bancaDisponible): ?>
@@ -26,6 +33,8 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                             style="height: 48px; width: 48px; object-fit: contain; background: #fff; padding: 2px;">
                     </button>
                 </form>
+                <?php endif; ?>
+                
                 <script>
                     // Se llama directamente desde onclick del botón Banca.
                     // POST tradicional: no depende de fetch, AJAX ni permisos CORS.

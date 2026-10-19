@@ -135,7 +135,7 @@ final class Autenticacion
         self::validarLimite($conexion, $identificadorHash, $ipHash);
 
         $consulta = $conexion->prepare(
-            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, `2fa`
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, uso_sistemas, `2fa`
              FROM usuarios
              WHERE LOWER(TRIM(COALESCE(email, ''))) = :correo
                 OR LOWER(TRIM(COALESCE(usuario, ''))) = :usuario
@@ -212,7 +212,7 @@ final class Autenticacion
 
         $usuarioId = (int) $_SESSION['auth_2fa_usuario_id'];
         $consulta = $conexion->prepare(
-            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, `2fa`
+            "SELECT id, nombre, appat, apmat, email, usuario, password, tipo, imagen, cliente, uso_sistemas, `2fa`
              FROM usuarios WHERE id = :usuario LIMIT 1"
         );
         $consulta->execute([':usuario' => $usuarioId]);
@@ -248,7 +248,7 @@ final class Autenticacion
             throw new AutenticacionException('La cuenta de la passkey no está disponible.');
         }
         $consulta = $conexion->prepare(
-            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen, cliente FROM usuarios WHERE id = :usuario LIMIT 1'
+            'SELECT id, nombre, appat, apmat, email, usuario, tipo, imagen, cliente, uso_sistemas FROM usuarios WHERE id = :usuario LIMIT 1'
         );
         $consulta->execute([':usuario' => $usuarioId]);
         $usuario = $consulta->fetch(PDO::FETCH_ASSOC);
@@ -483,6 +483,12 @@ final class Autenticacion
             : (string) (($usuario['usuario'] ?? '') ?: ($usuario['email'] ?? 'Usuario'));
         $_SESSION['auth_tipo'] = trim((string) ($usuario['tipo'] ?? ''));
         $_SESSION['auth_imagen'] = trim((string) ($usuario['imagen'] ?? ''));
+        if (array_key_exists('uso_sistemas', $usuario)) {
+            $usoSistemas = trim((string) ($usuario['uso_sistemas'] ?? ''));
+            $_SESSION['uso_sistemas'] = preg_match('/\A[01](?:\s*,\s*[01])*\z/D', $usoSistemas) === 1
+                ? array_map('intval', array_map('trim', explode(',', $usoSistemas)))
+                : [];
+        }
         $_SESSION['auth_inicio'] = $ahora;
         $_SESSION['auth_ultima_actividad'] = $ahora;
         $_SESSION['auth_regenerada'] = $ahora;
@@ -752,7 +758,7 @@ final class Autenticacion
     private static function limpiarAutenticacion(): void
     {
         foreach (array_keys($_SESSION) as $clave) {
-            if ($clave === 'usuario_id' || $clave === 'cadena_total' || $clave === 'banca_estatus' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
+            if ($clave === 'usuario_id' || $clave === 'cadena_total' || $clave === 'banca_estatus' || $clave === 'uso_sistemas' || str_starts_with((string) $clave, 'auth_') || str_starts_with((string) $clave, 'sat_') || $clave === 'logout_csrf') {
                 unset($_SESSION[$clave]);
             }
         }
