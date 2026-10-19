@@ -14,7 +14,7 @@ $bancaDisponible = is_string($cadenaBanca) && $cadenaBanca !== ''
                     <img src="<?= htmlspecialchars($sidebarLogo) ?>" class="erp-company-logo rounded"
                         alt="Logo del sistema" style="height: 48px; width: auto; object-fit: contain;">
                 </a>
-                <form id="formLoginBanca" action="banca-puente.php" method="post"
+                <form id="formLoginBanca" action="https://facturas.sistema14.com/banca-puente.php" method="post"
                     target="_blank" class="m-0">
                     <?php if ($bancaDisponible): ?>
                         <input type="hidden" name="cadena_total"
