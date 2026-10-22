@@ -52,6 +52,12 @@ foreach ($conceptos as &$concepto) {
 }
 unset($concepto);
 $catalogos = $contextoFactura['catalogos'];
+if (!empty($catalogos['metodos_pago'])) {
+    foreach ($catalogos['metodos_pago'] as &$metodo) {
+        $metodo['descripcion'] = $repararTextoCatalogo((string) ($metodo['descripcion'] ?? ''));
+    }
+    unset($metodo);
+}
 if (!empty($catalogos['formas_pago'])) {
     foreach ($catalogos['formas_pago'] as &$forma) {
         $forma['descripcion'] = $repararTextoCatalogo((string) ($forma['descripcion'] ?? ''));
