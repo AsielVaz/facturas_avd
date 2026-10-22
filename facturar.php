@@ -927,7 +927,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     });
     grossTotalSwitch.addEventListener('change', () => {
         grossTotalLabel.textContent = grossTotalSwitch.checked ? 'Total' : 'Neto';
-        unitPriceHeading.textContent = grossTotalSwitch.checked ? 'Precio unitario (IVA incluido)' : 'Precio unitario';
+        unitPriceHeading.textContent = grossTotalSwitch.checked ? 'Precio unitario' : 'Precio unitario';
         validatedPayload = null;
         if (saveInvoiceButton) saveInvoiceButton.disabled = true;
         if (savePrefacturaButton) savePrefacturaButton.disabled = true;
