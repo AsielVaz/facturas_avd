@@ -17,11 +17,32 @@ try {
     $error = 'No fue posible cargar los datos para el complemento.';
 }
 $esc = static fn(mixed $valor): string => htmlspecialchars((string) $valor, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$repararFormaPago = static function (string $texto): string {
+    return preg_replace_callback(
+        '/Ã[^\x00-\x7F]|Â[^\x00-\x7F]|â[^\x00-\x7F]{2}/u',
+        static function (array $coincidencia): string {
+            $reparado = @iconv('UTF-8', 'Windows-1252', $coincidencia[0]);
+            return is_string($reparado) && preg_match('//u', $reparado) === 1
+                ? $reparado
+                : $coincidencia[0];
+        },
+        $texto
+    ) ?? $texto;
+};
 $pageTitle = 'Nuevo complemento de pago';
 $pageEyebrow = 'Facturas / Complementos de pago';
 $pageAction = '<a class="btn btn-soft-secondary" href="complementos-pago.php">Volver al listado</a>';
 require __DIR__ . '/templates/page-start.php';
 ?>
+<style>
+    .complemento-acciones-sticky {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        background: var(--bs-card-bg);
+        box-shadow: 0 -0.35rem 1rem rgba(0, 0, 0, 0.12);
+    }
+</style>
 
 <?php if ($error !== ''): ?><div class="alert alert-danger"><?= $esc($error) ?></div><?php endif; ?>
 <div class="alert alert-warning">
@@ -52,7 +73,7 @@ require __DIR__ . '/templates/page-start.php';
                         <option value="">Seleccionar forma...</option>
                         <?php foreach ($contexto['formas_pago'] as $forma): ?>
                         <?php if ((string) $forma['clave'] !== '99'): ?>
-                        <option value="<?= (int) $forma['id'] ?>" <?= (string) $forma['clave'] === '03' ? 'selected' : '' ?>><?= $esc($forma['clave'] . ' · ' . $forma['descripcion']) ?></option>
+                        <option value="<?= (int) $forma['id'] ?>" <?= (string) $forma['clave'] === '03' ? 'selected' : '' ?>><?= $esc($forma['clave'] . ' · ' . $repararFormaPago((string) $forma['descripcion'])) ?></option>
                         <?php endif; ?>
                         <?php endforeach; ?>
                     </select>
@@ -67,9 +88,13 @@ require __DIR__ . '/templates/page-start.php';
 
     <div class="card mb-3">
         <div class="card-header d-flex flex-wrap justify-content-between gap-2 align-items-center">
-            <div><h5 class="mb-0">Facturas PPD con saldo</h5><small class="text-muted">Selecciona una o varias facturas del mismo perfil fiscal e indica cuánto se pagó de cada una.</small></div>
-            <span id="contadorFacturas" class="badge bg-primary-subtle text-primary">0 seleccionadas</span>
+            <div><h5 class="mb-0">Facturas PPD con saldo</h5><small class="text-muted">Selecciona una o varias facturas del mismo perfil fiscal e indica cuánto se pagó de cada una. Máximo 20 por complemento.</small></div>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <label class="form-check mb-0"><input id="seleccionarTodasFacturas" class="form-check-input" type="checkbox" disabled> Seleccionar todas</label>
+                <span id="contadorFacturas" class="badge bg-primary-subtle text-primary">0 seleccionadas</span>
+            </div>
         </div>
+        <div id="avisoLimiteFacturas" class="alert alert-warning rounded-0 mb-0 d-none" role="status"></div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead><tr><th scope="col" style="width:42px">#</th><th>Factura</th><th>UUID</th><th>Fecha</th><th>Saldo anterior</th><th>Parcialidad</th><th style="min-width:165px">Monto pagado</th><th>Saldo restante</th></tr></thead>
@@ -78,7 +103,7 @@ require __DIR__ . '/templates/page-start.php';
         </div>
     </div>
 
-    <div class="card">
+    <div class="card complemento-acciones-sticky">
         <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div><small class="text-muted d-block">Monto total recibido</small><strong id="totalPago" class="fs-22">$0.00</strong></div>
             <div class="d-flex flex-wrap gap-2">
@@ -105,6 +130,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const body = document.getElementById('facturasBody');
     const total = document.getElementById('totalPago');
     const contador = document.getElementById('contadorFacturas');
+    const seleccionarTodas = document.getElementById('seleccionarTodasFacturas');
+    const avisoLimite = document.getElementById('avisoLimiteFacturas');
     const guardar = document.getElementById('guardarComplemento');
     const guardarYTimbrar = document.getElementById('guardarYTimbrar');
     const textoGuardar = guardar.innerHTML;
@@ -181,7 +208,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     function actualizarTotal() {
         let suma = 0;
         let cantidad = 0;
-        body.querySelectorAll('tr[data-factura-id]').forEach(tr => {
+        const filas = [...body.querySelectorAll('tr[data-factura-id]')];
+        filas.forEach(tr => {
             const check = tr.querySelector('input[type=checkbox]');
             const monto = tr.querySelector('.monto-pagado');
             const restante = tr.querySelector('.saldo-restante');
@@ -197,11 +225,25 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             }
         });
         contador.textContent = cantidad + ' seleccionada' + (cantidad === 1 ? '' : 's');
+        seleccionarTodas.disabled = enProceso || filas.length === 0;
+        seleccionarTodas.checked = filas.length > 0 && cantidad === filas.length;
+        seleccionarTodas.indeterminate = cantidad > 0 && cantidad < filas.length;
+        const excedeLimite = cantidad > 20;
+        avisoLimite.classList.toggle('d-none', !excedeLimite);
+        avisoLimite.textContent = excedeLimite
+            ? 'Seleccionaste ' + cantidad + ' facturas. Solo se permiten 20 por complemento; desmarca ' + (cantidad - 20) + ' para continuar.'
+            : '';
         total.textContent = dinero(suma);
-        const deshabilitar = enProceso || !cantidad || !cliente.value || !perfil.value || !forma.value || !fecha.value;
+        const deshabilitar = enProceso || !cantidad || excedeLimite || !cliente.value || !perfil.value || !forma.value || !fecha.value;
         guardar.disabled = deshabilitar;
         guardarYTimbrar.disabled = deshabilitar;
     }
+    seleccionarTodas.addEventListener('change', () => {
+        body.querySelectorAll('tr[data-factura-id] input[type=checkbox]').forEach(check => {
+            check.checked = seleccionarTodas.checked;
+        });
+        actualizarTotal();
+    });
     function mostrarFacturas(facturas) {
         body.replaceChildren();
         if (!facturas.length) return mostrarVacio('No hay facturas PPD timbradas con saldo para este perfil fiscal.');
@@ -292,6 +334,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             facturas.push({factura_id: Number(tr.dataset.facturaId), monto: pagado.toFixed(2)});
         }
         if (!facturas.length) return aviso('Selecciona al menos una factura.');
+        if (facturas.length > 20) return aviso('Solo se permiten 20 facturas por complemento. Reduce la selección para continuar.');
         enProceso = true;
         actualizarTotal();
         (timbrarAlGuardar ? guardarYTimbrar : guardar).textContent = 'Guardando...';
