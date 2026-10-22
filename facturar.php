@@ -33,8 +33,31 @@ try {
 
 $emisor = $contextoFactura['emisor'];
 $clientes = $contextoFactura['clientes'];
+$repararTextoCatalogo = static function (string $texto): string {
+    // Repara secuencias ya guardadas con UTF-8 interpretado como Windows-1252.
+    return preg_replace_callback(
+        '/Ã[^\x00-\x7F]|Â[^\x00-\x7F]|â[^\x00-\x7F]{2}/u',
+        static function (array $coincidencia): string {
+            $reparado = @iconv('UTF-8', 'Windows-1252', $coincidencia[0]);
+            return is_string($reparado) && preg_match('//u', $reparado) === 1
+                ? $reparado
+                : $coincidencia[0];
+        },
+        $texto
+    ) ?? $texto;
+};
 $conceptos = $contextoFactura['conceptos'];
+foreach ($conceptos as &$concepto) {
+    $concepto['concepto'] = $repararTextoCatalogo((string) ($concepto['concepto'] ?? ''));
+}
+unset($concepto);
 $catalogos = $contextoFactura['catalogos'];
+if (!empty($catalogos['formas_pago'])) {
+    foreach ($catalogos['formas_pago'] as &$forma) {
+        $forma['descripcion'] = $repararTextoCatalogo((string) ($forma['descripcion'] ?? ''));
+    }
+    unset($forma);
+}
 $fechaHoy = new DateTimeImmutable('today');
 $fechaFacturaIso = $fechaHoy->format('Y-m-d');
 $fechaFacturaVisible = $fechaHoy->format('d-M-Y');
