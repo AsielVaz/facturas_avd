@@ -212,8 +212,8 @@ require 'templates/page-start.php';
                         <div class="d-flex align-items-center gap-2"><span class="invoice-step bg-success-subtle text-success">3</span><div><h5 class="mb-0">Conceptos facturables</h5><small class="text-muted"><?= count($conceptos) ?> conceptos disponibles para la empresa activa.</small></div></div>
                         <div class="d-flex flex-wrap align-items-center gap-3">
                             <div class="invoice-type-switcher form-check form-switch mb-0">
-                                <input id="grossTotalSwitch" class="form-check-input" type="checkbox" role="switch" aria-label="Total Bruto" title="El precio capturado incluye IVA; se desglosará en el total de la factura">
-                                <label class="form-check-label" for="grossTotalSwitch">Total Bruto</label>
+                                <input id="grossTotalSwitch" class="form-check-input" type="checkbox" role="switch" title="Apagado: precio neto antes de IVA. Encendido: precio total con IVA incluido.">
+                                <label id="grossTotalLabel" class="form-check-label" for="grossTotalSwitch">Neto</label>
                             </div>
                             <button id="addItemButton" type="button" class="btn btn-sm btn-soft-primary"><i data-lucide="plus" class="fs-16 me-1"></i>Agregar concepto</button>
                         </div>
@@ -312,6 +312,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const invoiceTypeLabel = document.getElementById('invoiceTypeLabel');
     const invoiceTypeHint = document.getElementById('invoiceTypeHint');
     const grossTotalSwitch = document.getElementById('grossTotalSwitch');
+    const grossTotalLabel = document.getElementById('grossTotalLabel');
     const unitPriceHeading = document.getElementById('unitPriceHeading');
     const advancedFields = [...document.querySelectorAll('.invoice-advanced-field')];
     const exportSelect = document.getElementById('exportSelect');
@@ -896,6 +897,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         }
     });
     grossTotalSwitch.addEventListener('change', () => {
+        grossTotalLabel.textContent = grossTotalSwitch.checked ? 'Total' : 'Neto';
         unitPriceHeading.textContent = grossTotalSwitch.checked ? 'Precio unitario (IVA incluido)' : 'Precio unitario';
         validatedPayload = null;
         if (saveInvoiceButton) saveInvoiceButton.disabled = true;
