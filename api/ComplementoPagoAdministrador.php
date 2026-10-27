@@ -94,12 +94,8 @@ final class ComplementoPagoAdministrador
             || !is_array($partidas) || $partidas === [] || count($partidas) > 20) {
             throw new ComplementoPagoValidacionException('Completa el cliente, perfil, forma de pago y las facturas relacionadas.');
         }
-        $fechaTexto = (string) ($datos['fecha_pago'] ?? '');
-        $fecha = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', $fechaTexto);
-        if (!$fecha || $fecha->format('Y-m-d\TH:i') !== $fechaTexto
-            || $fecha > new DateTimeImmutable('now')) {
-            throw new ComplementoPagoValidacionException('Selecciona una fecha y hora de pago válidas, no futuras.');
-        }
+        // La fecha de pago la fija el servidor al guardar, no el navegador.
+        $fecha = new DateTimeImmutable('now');
         $montos = [];
         foreach ($partidas as $partida) {
             if (!is_array($partida)) throw new ComplementoPagoValidacionException('Una factura relacionada no es válida.');
@@ -181,7 +177,7 @@ final class ComplementoPagoAdministrador
                     ':metodo' => $metodo, ':moneda' => $moneda,
                     ':forma' => (string) $formaId, ':total' => $totalCentavos / 100,
                     ':empresa' => $this->empresa, ':token' => $token, ':perfil' => (string) $perfilId,
-                    ':fecha_pago' => $fecha->format('Y-m-d H:i:00'),
+                    ':fecha_pago' => $fecha->format('Y-m-d H:i:s'),
                 ]);
                 $complementoId = (int) $this->conexion->lastInsertId();
                 $etapa = 'asignar el folio al comprobante';
@@ -199,7 +195,7 @@ final class ComplementoPagoAdministrador
                         ':monto' => $relacion['monto'], ':numero' => $relacion['numero'],
                         ':saldo' => $relacion['saldo'], ':restante' => $relacion['restante'],
                         ':uuid' => $relacion['uuid'], ':folio' => $relacion['folio'],
-                        ':serie' => $relacion['serie'], ':fecha_pago' => $fecha->format('Y-m-d H:i:00'),
+                        ':serie' => $relacion['serie'], ':fecha_pago' => $fecha->format('Y-m-d H:i:s'),
                     ]);
                 }
                 $etapa = 'confirmar la transacción';

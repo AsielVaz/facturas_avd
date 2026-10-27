@@ -58,6 +58,22 @@ try {
             'facturas' => $administrador->facturasDisponibles($clienteId, $perfilId),
             default => throw new ComplementoPagoValidacionException('La consulta solicitada no existe.'),
         };
+        if ($accion === 'perfiles') {
+            foreach ($datos['perfiles'] as &$perfil) {
+                $razonSocial = (string) $perfil['razon_social'];
+                $perfil['razon_social'] = preg_replace_callback(
+                    '/Ã[^\x00-\x7F]|Â[^\x00-\x7F]|â[^\x00-\x7F]{2}/u',
+                    static function (array $coincidencia): string {
+                        $reparado = @iconv('UTF-8', 'Windows-1252', $coincidencia[0]);
+                        return is_string($reparado) && preg_match('//u', $reparado) === 1
+                            ? $reparado
+                            : $coincidencia[0];
+                    },
+                    $razonSocial
+                ) ?? $razonSocial;
+            }
+            unset($perfil);
+        }
         echo json_encode(['ok' => true, 'datos' => $datos], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         exit;
     }
