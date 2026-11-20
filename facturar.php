@@ -33,6 +33,9 @@ try {
 
 $emisor = $contextoFactura['emisor'];
 $clientes = $contextoFactura['clientes'];
+$clienteInicialId = $modoEdicion
+    ? (int) ($facturaPendiente['cliente_id'] ?? 0)
+    : (count($clientes) === 1 ? (int) $clientes[0]['id'] : 0);
 $repararTextoCatalogo = static function (string $texto): string {
     // Repara secuencias ya guardadas con UTF-8 interpretado como Windows-1252.
     return preg_replace_callback(
@@ -159,9 +162,10 @@ require 'templates/page-start.php';
                     <div class="card-body">
                         <div class="row g-3 mb-4">
                             <div class="col-12"><h6 class="text-uppercase text-muted fs-12 mb-0">Emisor · <?= htmlspecialchars((string) ($emisor['nombre'] ?? '')) ?></h6></div>
-                            <div class="col-md-6"><label class="form-label">Razón social</label><input class="form-control invoice-readonly" readonly value="<?= htmlspecialchars((string) ($emisor['nombre'] ?? '')) ?>"></div>
-                            <div class="col-md-3"><label class="form-label">RFC</label><input class="form-control invoice-readonly font-monospace" readonly value="<?= htmlspecialchars((string) ($emisor['rfc'] ?? '')) ?>"></div>
-                            <div class="col-md-3"><label class="form-label">Régimen / CP</label><input class="form-control invoice-readonly" readonly value="<?= htmlspecialchars((string) ($emisor['regimen_fiscal'] ?? '')) ?> · <?= htmlspecialchars((string) ($emisor['cp'] ?? '')) ?>"></div>
+                            <div class="col-md-6 col-lg-5"><label class="form-label" for="emisorRazonSocial">Razón social</label><input id="emisorRazonSocial" class="form-control invoice-readonly" readonly value="<?= htmlspecialchars((string) ($emisor['nombre'] ?? '')) ?>"></div>
+                            <div class="col-md-6 col-lg-3"><label class="form-label" for="emisorRfc">RFC</label><input id="emisorRfc" class="form-control invoice-readonly font-monospace" readonly value="<?= htmlspecialchars((string) ($emisor['rfc'] ?? '')) ?>"></div>
+                            <div class="col-md-6 col-lg-2"><label class="form-label" for="emisorRegimen">Régimen</label><input id="emisorRegimen" class="form-control invoice-readonly" readonly value="<?= htmlspecialchars((string) ($emisor['regimen_fiscal'] ?? '')) ?>"></div>
+                            <div class="col-md-6 col-lg-2"><label class="form-label" for="emisorCp">CP</label><input id="emisorCp" class="form-control invoice-readonly" readonly value="<?= htmlspecialchars((string) ($emisor['cp'] ?? '')) ?>"></div>
                         </div>
                         <hr>
                         <div class="row g-3">
@@ -170,7 +174,7 @@ require 'templates/page-start.php';
                                 <select id="clientSelect" class="form-select" required>
                                     <option value=""><?= $clientes === [] ? 'No tienes un cliente asignado' : 'Seleccionar cliente...' ?></option>
                                     <?php foreach ($clientes as $cliente): ?>
-                                        <option value="<?= (int) $cliente['id'] ?>" data-facturable="<?= !empty($cliente['facturable']) ? '1' : '0' ?>" <?= $modoEdicion && (int) $facturaPendiente['cliente_id'] === (int) $cliente['id'] ? 'selected' : '' ?>>
+                                        <option value="<?= (int) $cliente['id'] ?>" data-facturable="<?= !empty($cliente['facturable']) ? '1' : '0' ?>" <?= $clienteInicialId === (int) $cliente['id'] ? 'selected' : '' ?>>
                                             <?= htmlspecialchars((string) $cliente['nombre']) ?> · <?= (int) $cliente['perfiles'] ?> perfil(es)<?= empty($cliente['facturable']) ? ' · incompleto' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
@@ -1211,6 +1215,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         originalEditSnapshot = editSnapshot();
         updateSaveAvailability();
     } else {
+        if (clientSelect.value) await loadProfiles();
         addItem();
     }
 })();
