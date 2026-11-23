@@ -17,6 +17,7 @@ try {
     $error = 'No fue posible cargar los datos para el complemento.';
 }
 $esc = static fn(mixed $valor): string => htmlspecialchars((string) $valor, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$clienteAsignado = count($contexto['clientes']) === 1 ? $contexto['clientes'][0] : null;
 $repararFormaPago = static function (string $texto): string {
     return preg_replace_callback(
         '/Ã[^\x00-\x7F]|Â[^\x00-\x7F]|â[^\x00-\x7F]{2}/u',
@@ -56,16 +57,14 @@ require __DIR__ . '/templates/page-start.php';
             <div class="row g-3">
                 <div class="col-lg-6">
                     <label class="form-label" for="cliente">Cliente</label>
-                    <select class="form-select" id="cliente" required <?= $error !== '' ? 'disabled' : '' ?>>
-                        <option value="">Seleccionar cliente...</option>
-                        <?php foreach ($contexto['clientes'] as $cliente): ?>
-                        <option value="<?= (int) $cliente['id'] ?>"><?= $esc($cliente['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input class="form-control" id="cliente" type="text" readonly
+                        value="<?= $esc($clienteAsignado['nombre'] ?? '') ?>"
+                        placeholder="No tienes un cliente asignado">
+                    <input id="clienteId" type="hidden" value="<?= (int) ($clienteAsignado['id'] ?? 0) ?>">
                 </div>
                 <div class="col-lg-6">
                     <label class="form-label" for="perfil">Razón social / perfil fiscal</label>
-                    <select class="form-select" id="perfil" required disabled><option value="">Selecciona primero un cliente...</option></select>
+                    <select class="form-select" id="perfil" required disabled><option value=""><?= $clienteAsignado ? 'Cargando perfiles fiscales...' : 'No tienes un cliente asignado' ?></option></select>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="formaPago">Forma en que se recibió el pago</label>
@@ -100,7 +99,7 @@ require __DIR__ . '/templates/page-start.php';
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead><tr><th scope="col" style="width:42px">#</th><th>Factura</th><th>UUID</th><th>Fecha</th><th>Saldo anterior</th><th>Parcialidad</th><th style="min-width:165px">Monto pagado</th><th>Saldo restante</th></tr></thead>
-                <tbody id="facturasBody"><tr><td colspan="8" class="text-center text-muted py-4">Selecciona un cliente y su perfil fiscal para consultar las facturas.</td></tr></tbody>
+                <tbody id="facturasBody"><tr><td colspan="8" class="text-center text-muted py-4"><?= $clienteAsignado ? 'Selecciona un perfil fiscal para consultar las facturas.' : 'No tienes un cliente asignado.' ?></td></tr></tbody>
             </table>
         </div>
     </div>
@@ -125,7 +124,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
 <script>
 (() => {
     const form = document.getElementById('complementoForm');
-    const cliente = document.getElementById('cliente');
+    const cliente = document.getElementById('clienteId');
     const perfil = document.getElementById('perfil');
     const forma = document.getElementById('formaPago');
     const fecha = document.getElementById('fechaPago');
@@ -300,9 +299,9 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         });
         actualizarTotal();
     }
-    cliente.addEventListener('change', async () => {
+    async function cargarPerfilesCliente() {
         const actual = ++solicitudActual;
-        perfil.replaceChildren(new Option('Selecciona primero un cliente...', ''));
+        perfil.replaceChildren(new Option('Cargando perfiles fiscales...', ''));
         perfil.disabled = true;
         mostrarVacio('Selecciona un perfil fiscal.');
         if (!cliente.value) return;
@@ -315,7 +314,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         } catch (error) {
             if (actual === solicitudActual) aviso(error.message, error.diagnostico);
         }
-    });
+    }
+    if (Number(cliente.value) > 0) cargarPerfilesCliente();
     perfil.addEventListener('change', async () => {
         const actual = ++solicitudActual;
         mostrarVacio('Consultando facturas PPD...');
