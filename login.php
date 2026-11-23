@@ -108,7 +108,7 @@ $requiereSegundoFactor = !$registroPasskeyPendiente && Autenticacion::segundoFac
 <html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="utf-8">
-    <title>Iniciar sesión | ERP Dinámico</title>
+    <title>Iniciar sesión | Facturación14</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Acceso seguro al sistema de facturación">
     <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg?v=3">

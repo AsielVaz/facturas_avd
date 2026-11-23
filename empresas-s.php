@@ -47,7 +47,7 @@ if (Autenticacion::accesoRestringidoAEmpresas() && $companies === []) {
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Sin empresa asignada | ERP Dinámico</title>
+        <title>Sin empresa asignada | Facturación14</title>
         <link href="assets/css/vendor.min.css" rel="stylesheet">
         <link href="assets/css/app.min.css" rel="stylesheet">
     </head>

@@ -20,7 +20,7 @@ require __DIR__ . '/head.php';
     <div class="page-content">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <div>
-                <p class="text-uppercase text-muted fs-12 fw-semibold mb-1"><?= htmlspecialchars($pageEyebrow ?? 'ERP Dinamico') ?></p>
+                <p class="text-uppercase text-muted fs-12 fw-semibold mb-1"><?= htmlspecialchars($pageEyebrow ?? 'Facturación14') ?></p>
                 <h4 class="erp-page-title mb-0"><?= htmlspecialchars($pageTitle) ?></h4>
             </div>
             <?php if (!empty($pageAction)): ?>

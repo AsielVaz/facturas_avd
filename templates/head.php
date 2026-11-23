@@ -1,12 +1,12 @@
 <?php
-$pageTitle = $pageTitle ?? 'ERP Dinamico';
+$pageTitle = $pageTitle ?? 'Facturación14';
 $pageDescription = $pageDescription ?? 'Administracion de facturas, bancos e inventario.';
 ?>
 <!DOCTYPE html>
 <html lang="es" class="sidebar-hidden">
 <head>
     <meta charset="utf-8">
-    <title><?= htmlspecialchars($pageTitle) ?> | ERP Dinamico</title>
+    <title><?= htmlspecialchars($pageTitle) ?> | Facturación14</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="<?= htmlspecialchars($pageDescription) ?>">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">

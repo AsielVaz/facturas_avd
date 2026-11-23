@@ -36,6 +36,13 @@ $clientes = $contextoFactura['clientes'];
 $clienteInicialId = $modoEdicion
     ? (int) ($facturaPendiente['cliente_id'] ?? 0)
     : (count($clientes) === 1 ? (int) $clientes[0]['id'] : 0);
+$clienteInicialNombre = '';
+foreach ($clientes as $cliente) {
+    if ((int) $cliente['id'] === $clienteInicialId) {
+        $clienteInicialNombre = (string) $cliente['nombre'];
+        break;
+    }
+}
 $repararTextoCatalogo = static function (string $texto): string {
     // Repara secuencias ya guardadas con UTF-8 interpretado como Windows-1252.
     return preg_replace_callback(
@@ -170,15 +177,11 @@ require 'templates/page-start.php';
                         <hr>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label for="clientSelect" class="form-label">Cliente <span class="text-danger">*</span></label>
-                                <select id="clientSelect" class="form-select" required>
-                                    <option value=""><?= $clientes === [] ? 'No tienes un cliente asignado' : 'Seleccionar cliente...' ?></option>
-                                    <?php foreach ($clientes as $cliente): ?>
-                                        <option value="<?= (int) $cliente['id'] ?>" data-facturable="<?= !empty($cliente['facturable']) ? '1' : '0' ?>" <?= $clienteInicialId === (int) $cliente['id'] ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string) $cliente['nombre']) ?> · <?= (int) $cliente['perfiles'] ?> perfil(es)<?= empty($cliente['facturable']) ? ' · incompleto' : '' ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <label for="clienteRazonSocial" class="form-label">Razón social</label>
+                                <input id="clienteRazonSocial" class="form-control invoice-readonly" readonly
+                                    value="<?= htmlspecialchars($clienteInicialNombre, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
+                                    placeholder="No tienes un cliente asignado">
+                                <input id="clientIdInput" type="hidden" value="<?= $clienteInicialId ?>">
                             </div>
                             <div class="col-md-6">
                                 <label for="profileSelect" class="form-label">Perfil fiscal / clave corta <span class="text-danger">*</span></label>
@@ -186,7 +189,7 @@ require 'templates/page-start.php';
                             </div>
                             <div class="col-12">
                                 <div id="receiverSummary" class="invoice-fiscal-summary border rounded-3 p-3 bg-body-tertiary text-muted d-flex align-items-center">
-                                    Selecciona un cliente y uno de sus perfiles fiscales.
+                                    <?= $clienteInicialId > 0 ? 'Selecciona uno de los perfiles fiscales del cliente.' : 'No tienes un cliente asignado para facturar.' ?>
                                 </div>
                             </div>
                         </div>
@@ -329,7 +332,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
     const form = document.getElementById('invoiceForm');
     const stampPendingButton = document.getElementById('stampPendingButton');
     const stampPendingHint = document.getElementById('stampPendingHint');
-    const clientSelect = document.getElementById('clientSelect');
+    const clientIdInput = document.getElementById('clientIdInput');
     const profileSelect = document.getElementById('profileSelect');
     const receiverSummary = document.getElementById('receiverSummary');
     const currencySelect = document.getElementById('currencySelect');
@@ -648,13 +651,13 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         profileSelect.replaceChildren(new Option('Cargando perfiles...', ''));
         receiverSummary.className = 'invoice-fiscal-summary border rounded-3 p-3 bg-body-tertiary text-muted d-flex align-items-center';
         receiverSummary.textContent = 'Consultando perfiles fiscales del cliente...';
-        if (!clientSelect.value) {
+        if (!clientIdInput.value) {
             profileSelect.replaceChildren(new Option('Selecciona primero un cliente...', ''));
-            receiverSummary.textContent = 'Selecciona un cliente y uno de sus perfiles fiscales.';
+            receiverSummary.textContent = 'No tienes un cliente asignado para facturar.';
             return;
         }
         try {
-            const response = await fetch('api/facturacion.php?accion=perfiles&cliente_id=' + encodeURIComponent(clientSelect.value), {headers: {'Accept': 'application/json'}});
+            const response = await fetch('api/facturacion.php?accion=perfiles&cliente_id=' + encodeURIComponent(clientIdInput.value), {headers: {'Accept': 'application/json'}});
             const payload = await response.json();
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'No fue posible consultar los perfiles.');
             const options = [new Option('Seleccionar perfil fiscal...', '')];
@@ -820,7 +823,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
             factura_id: editing?.id || 0,
             huella: editing?.huella || '',
             fecha: document.getElementById('invoiceDate').dataset.dateIso,
-            cliente_id: Number(clientSelect.value),
+            cliente_id: Number(clientIdInput.value),
             perfil_id: Number(profileSelect.value),
             moneda_id: Number(currencySelect.value),
             tipo_cambio: Number(exchangeInput.value),
@@ -876,7 +879,6 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         bootstrap.Modal.getOrCreateInstance(document.getElementById('previewModal')).show();
     }
 
-    clientSelect.addEventListener('change', loadProfiles);
     form.addEventListener('input', updateSaveAvailability);
     form.addEventListener('change', updateSaveAvailability);
     profileSelect.addEventListener('change', showProfile);
@@ -1215,7 +1217,7 @@ $pageScripts = $facturacionError === '' ? '<script>window.facturacionConfig=' . 
         originalEditSnapshot = editSnapshot();
         updateSaveAvailability();
     } else {
-        if (clientSelect.value) await loadProfiles();
+        if (clientIdInput.value) await loadProfiles();
         addItem();
     }
 })();
