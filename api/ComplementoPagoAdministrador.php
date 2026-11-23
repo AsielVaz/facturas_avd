@@ -55,6 +55,8 @@ final class ComplementoPagoAdministrador
                AND f.desactivado IS NULL
                AND f.uuid IS NOT NULL AND TRIM(f.uuid) <> ''
              GROUP BY f.id
+             HAVING COUNT(rc.id) = 0
+                 OR COALESCE(SUM(rc.monto), 0) < COALESCE(f.total_iva, f.xml_total, f.total_factura, 0)
              ORDER BY f.id DESC LIMIT 300"
         );
         $consulta->bindValue(':empresa', $this->empresa, PDO::PARAM_INT);
