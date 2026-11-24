@@ -154,15 +154,16 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         const anterior = input.value;
         const posicion = input.selectionStart ?? anterior.length;
         const caracteresAntes = anterior.slice(0, posicion).replaceAll(',', '').length;
+        const negativo = anterior.includes('-');
         const limpio = anterior.replace(/[^\d.]/g, '');
         if (limpio === '') {
-            input.value = '';
+            input.value = negativo ? '-' : '';
             return;
         }
         const partes = limpio.split('.');
         const entero = partes[0].replace(/^0+(?=\d)/, '') || '0';
         const decimales = partes.length > 1 ? '.' + partes.slice(1).join('').slice(0, 2) : '';
-        input.value = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimales;
+        input.value = (negativo ? '-' : '') + entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimales;
         let nuevaPosicion = 0;
         let caracteres = 0;
         while (nuevaPosicion < input.value.length && caracteres < caracteresAntes) {
@@ -216,22 +217,47 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         body.appendChild(tr);
         actualizarTotal();
     }
+    function errorMonto(input, saldo) {
+        const valor = input.value.replaceAll(',', '').trim();
+        if (valor.startsWith('-')) return 'El monto no puede ser negativo.';
+        if (!/^\d+(?:\.\d{1,2})?$/.test(valor) || Number(valor) <= 0) {
+            return 'Ingresa un monto mayor a $0.00 con máximo dos decimales.';
+        }
+        if (Math.round(Number(valor) * 100) > Math.round(saldo * 100)) {
+            return 'El monto no puede superar el saldo anterior de ' + dinero(saldo) + '.';
+        }
+        return '';
+    }
     function actualizarTotal() {
         let suma = 0;
         let cantidad = 0;
+        let hayMontoInvalido = false;
         const filas = [...body.querySelectorAll('tr[data-factura-id]')];
         filas.forEach(tr => {
             const check = tr.querySelector('input[type=checkbox]');
             const monto = tr.querySelector('.monto-pagado');
+            const error = tr.querySelector('.monto-error');
             const restante = tr.querySelector('.saldo-restante');
             const saldo = Number(tr.dataset.saldo);
             monto.disabled = !check.checked;
             if (check.checked) {
                 cantidad++;
-                const pagado = montoNumerico(monto) || 0;
-                if (pagado > 0 && pagado <= saldo) suma += pagado;
-                restante.textContent = dinero(Math.max(0, saldo - pagado));
+                const mensaje = errorMonto(monto, saldo);
+                monto.classList.toggle('is-invalid', !!mensaje);
+                monto.setAttribute('aria-invalid', mensaje ? 'true' : 'false');
+                error.textContent = mensaje;
+                if (mensaje) {
+                    hayMontoInvalido = true;
+                    restante.textContent = '—';
+                } else {
+                    const pagado = montoNumerico(monto);
+                    suma += pagado;
+                    restante.textContent = dinero(Math.max(0, saldo - pagado));
+                }
             } else {
+                monto.classList.remove('is-invalid');
+                monto.removeAttribute('aria-invalid');
+                error.textContent = '';
                 restante.textContent = dinero(saldo);
             }
         });
@@ -245,7 +271,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             ? 'Seleccionaste ' + cantidad + ' facturas. Solo se permiten 20 por complemento; desmarca ' + (cantidad - 20) + ' para continuar.'
             : '';
         total.textContent = dinero(suma);
-        const deshabilitar = enProceso || !cantidad || excedeLimite || !cliente.value || !perfil.value || !forma.value;
+        const deshabilitar = enProceso || !cantidad || hayMontoInvalido || excedeLimite || !cliente.value || !perfil.value || !forma.value;
         guardar.disabled = deshabilitar;
         guardarYTimbrar.disabled = deshabilitar;
     }
@@ -286,7 +312,12 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             monto.value = formatoMonto(Number(factura.saldo));
             monto.disabled = true;
             monto.setAttribute('aria-label', 'Monto pagado de ' + factura.folio);
-            agregar('').appendChild(monto);
+            const celdaMonto = agregar('');
+            const error = document.createElement('div');
+            error.id = 'monto-error-' + factura.id;
+            error.className = 'invalid-feedback monto-error';
+            monto.setAttribute('aria-describedby', error.id);
+            celdaMonto.append(monto, error);
             agregar(dinero(factura.saldo), 'saldo-restante');
             seleccion.addEventListener('change', actualizarTotal);
             monto.addEventListener('input', () => { separarMiles(monto); actualizarTotal(); });
