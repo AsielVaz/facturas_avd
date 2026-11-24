@@ -50,6 +50,7 @@ if (Autenticacion::accesoRestringidoAEmpresas() && $companies === []) {
         <title>Sin empresa asignada | Facturación14</title>
         <link href="assets/css/vendor.min.css" rel="stylesheet">
         <link href="assets/css/app.min.css" rel="stylesheet">
+        <link href="assets/css/facturacion14-theme.css?v=2" rel="stylesheet">
     </head>
     <body>
         <main class="min-vh-100 d-flex align-items-center justify-content-center p-3">

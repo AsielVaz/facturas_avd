@@ -13,6 +13,7 @@ $pageDescription = $pageDescription ?? 'Administracion de facturas, bancos e inv
     <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg?v=3">
     <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css">
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css">
+    <link href="assets/css/facturacion14-theme.css?v=2" rel="stylesheet" type="text/css">
     <script src="assets/js/config.min.js"></script>
     <style>
         .erp-page-title { letter-spacing: -.02em; }
