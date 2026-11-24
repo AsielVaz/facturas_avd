@@ -53,9 +53,12 @@ try {
         $accion = (string) ($_GET['accion'] ?? '');
         $clienteId = filter_input(INPUT_GET, 'cliente_id', FILTER_VALIDATE_INT) ?: 0;
         $perfilId = filter_input(INPUT_GET, 'perfil_id', FILTER_VALIDATE_INT) ?: 0;
+        $pagoId = filter_input(INPUT_GET, 'pago_id', FILTER_VALIDATE_INT) ?: 0;
         $datos = match ($accion) {
-            'perfiles' => $administrador->perfilesConSaldoPendiente($clienteId),
-            'facturas' => $administrador->facturasDisponibles($clienteId, $perfilId),
+            'empresa' => ['empresa_id' => SesionEmpresa::empresaActual()],
+            'perfiles' => $administrador->perfilesConDisponibilidad($clienteId, $pagoId),
+            'facturas' => $administrador->facturasDisponibles($clienteId, $perfilId, $pagoId),
+            'uuid' => $administrador->facturaPorUuid($clienteId, $perfilId, (string) ($_GET['uuid'] ?? '')),
             default => throw new ComplementoPagoValidacionException('La consulta solicitada no existe.'),
         };
         if ($accion === 'perfiles') {

@@ -1,3 +1,4 @@
 /api/passkeys_secret.local.php
+/api/cron-token.local
 /api/encriptador.php
 /tmp/banca-diagnostico-*.txt

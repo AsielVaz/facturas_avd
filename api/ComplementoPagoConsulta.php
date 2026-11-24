@@ -89,7 +89,8 @@ final class ComplementoPagoConsulta
     {
         return 'FROM facturas_complementos fc
                 LEFT JOIN clientes c ON c.id = fc.nombre
-                LEFT JOIN claves_cortas cc ON cc.id = CAST(fc.id_clave_corta AS UNSIGNED) AND cc.id_cliente = fc.nombre';
+                LEFT JOIN claves_cortas cc ON TRIM(COALESCE(fc.id_clave_corta, \'\')) = CAST(cc.id AS CHAR)
+                    AND cc.id_cliente = fc.nombre';
     }
 
     private function tablasListado(): string

@@ -54,6 +54,19 @@ $xpSinImpuesto->registerNamespace('pago20', 'http://www.sat.gob.mx/Pagos20');
 $exigir($xpSinImpuesto->evaluate('string(//pago20:DoctoRelacionado/@ObjetoImpDR)') === '01', 'ObjetoImpDR sin impuesto incorrecto.');
 $exigir($xpSinImpuesto->query('//pago20:ImpuestosDR|//pago20:ImpuestosP')->length === 0, 'Se emitieron impuestos inexistentes.');
 
+$origenTasaCero = '<?xml version="1.0"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Moneda="MXN" MetodoPago="PPD" Total="100.00"><cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="BBB010101BBB"/><cfdi:Conceptos><cfdi:Concepto ObjetoImp="02"/></cfdi:Conceptos><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="100.00" Importe="0.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="' . $uuid . '"/></cfdi:Complemento></cfdi:Comprobante>';
+$relacionTasaCero = [['monto' => '50.00', 'saldo' => '100.00', 'restante' => '50.00',
+    'num_pago' => 1, 'uuid_rel' => $uuid, 'xml_origen' => $origenTasaCero]];
+$datosTasaCero = $datos;
+$datosTasaCero['monto_total'] = '50.00';
+$xmlTasaCero = (new ComplementoPagoXmlGenerador())->generar($datosTasaCero, $relacionTasaCero);
+$domTasaCero = new DOMDocument();
+$exigir($domTasaCero->loadXML($xmlTasaCero), 'El XML de tasa 0 no se puede leer.');
+$xpTasaCero = new DOMXPath($domTasaCero);
+$xpTasaCero->registerNamespace('pago20', 'http://www.sat.gob.mx/Pagos20');
+$exigir($xpTasaCero->evaluate('string(//pago20:Totales/@TotalTrasladosBaseIVA0)') === '50.00', 'Base IVA 0 incorrecta.');
+$exigir($xpTasaCero->evaluate('string(//pago20:TrasladoDR/@TasaOCuotaDR)') === '0.000000', 'Tasa 0 incorrecta.');
+
 $relaciones[0]['uuid_rel'] = '00000000-0000-0000-0000-000000000000';
 try {
     (new ComplementoPagoXmlGenerador())->generar($datos, $relaciones);

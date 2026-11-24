@@ -120,7 +120,8 @@ final class ComplementoPagoTimbradoServicio
                     fp.clave AS forma_clave
              FROM facturas_complementos fc
              INNER JOIN empresas e ON e.id = fc.razon
-             INNER JOIN claves_cortas cc ON cc.id = CAST(fc.id_clave_corta AS UNSIGNED) AND cc.id_cliente = fc.nombre
+             INNER JOIN claves_cortas cc ON TRIM(COALESCE(fc.id_clave_corta, '')) = CAST(cc.id AS CHAR)
+                AND cc.id_cliente = fc.nombre
              INNER JOIN usuarios u ON u.id = :usuario AND u.cliente = cc.id_cliente
              INNER JOIN formas_pago fp ON fp.id = CAST(fc.forma_pago AS UNSIGNED)
              WHERE fc.id = :id AND fc.razon = :empresa LIMIT 1"

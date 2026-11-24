@@ -10,11 +10,21 @@ $_SESSION['complemento_pago_csrf'] ??= bin2hex(random_bytes(32));
 $_SESSION['complemento_timbrado_csrf'] ??= bin2hex(random_bytes(32));
 $error = '';
 $contexto = ['clientes' => [], 'formas_pago' => []];
+$pagoId = filter_input(INPUT_GET, 'pago_id', FILTER_VALIDATE_INT) ?: 0;
+$movimiento = null;
 try {
-    $contexto = (new ComplementoPagoAdministrador(Conexion::obtener()))->contexto();
+    $administradorComplemento = new ComplementoPagoAdministrador(Conexion::obtener());
+    $contexto = $administradorComplemento->contexto();
 } catch (Throwable $excepcion) {
     error_log('Error al preparar el complemento de pago: ' . $excepcion->getMessage());
     $error = 'No fue posible cargar los datos para el complemento.';
+}
+if ($pagoId > 0 && isset($administradorComplemento)) {
+    try {
+        $movimiento = $administradorComplemento->movimientoDisponible($pagoId);
+    } catch (ComplementoPagoValidacionException $excepcion) {
+        $error = $excepcion->getMessage();
+    }
 }
 $esc = static fn(mixed $valor): string => htmlspecialchars((string) $valor, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $clienteAsignado = count($contexto['clientes']) === 1 ? $contexto['clientes'][0] : null;
@@ -46,11 +56,16 @@ require __DIR__ . '/templates/page-start.php';
 </style>
 
 <?php if ($error !== ''): ?><div class="alert alert-danger"><?= $esc($error) ?></div><?php endif; ?>
+<?php if ($movimiento !== null): ?>
+<div class="alert alert-info">Movimiento #<?= (int) $movimiento['id'] ?> · Monto recibido:
+    <strong>$<?= $esc(number_format((float) $movimiento['monto'], 2, '.', ',')) ?></strong>.
+    Los importes seleccionados deben sumar este monto.</div>
+<?php endif; ?>
 <div class="alert alert-warning">
     Puedes guardar el complemento como <strong>pendiente</strong> para timbrarlo después, o guardarlo.
 </div>
 
-<form id="complementoForm" novalidate>
+<form id="complementoForm" data-empresa="<?= SesionEmpresa::empresaActual() ?>" novalidate>
     <div class="card mb-3">
         <div class="card-header"><h5 class="mb-0">Datos del pago</h5></div>
         <div class="card-body">
@@ -80,10 +95,18 @@ require __DIR__ . '/templates/page-start.php';
                 <div class="col-md-6">
                     <label class="form-label" for="fechaPago">Fecha del pago</label>
                     <input class="form-control" type="date" id="fechaPago" required
-                        value="<?= $esc(date('Y-m-d')) ?>" max="<?= $esc(date('Y-m-d')) ?>">
+                        value="<?= $esc($movimiento !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/D', (string) $movimiento['fecha_operacion']) ? $movimiento['fecha_operacion'] : date('Y-m-d')) ?>"
+                        max="<?= $esc(date('Y-m-d')) ?>">
                     <input type="hidden" id="horaPago"
                         data-instant="<?= $esc((new DateTimeImmutable('now'))->format(DATE_ATOM)) ?>"
                         data-zona="<?= $esc(SesionEmpresa::ZONA_HORARIA) ?>">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="tratamientoFiscalSelect">Tratamiento fiscal heredado</label>
+                    <select class="form-select" id="tratamientoFiscalSelect" disabled>
+                        <option value="">Se definirá al relacionar una factura</option>
+                    </select>
+                    <input type="hidden" id="tratamientoFiscal" value="">
                 </div>
             </div>
         </div>
@@ -97,18 +120,27 @@ require __DIR__ . '/templates/page-start.php';
                 <span id="contadorFacturas" class="badge bg-primary-subtle text-primary">0 seleccionadas</span>
             </div>
         </div>
+        <div class="card-body border-bottom">
+            <label class="form-label" for="uuidManual">Agregar factura por UUID</label>
+            <div class="d-flex flex-wrap gap-2">
+                <input class="form-control flex-grow-1" id="uuidManual" type="text" maxlength="36"
+                    placeholder="Pega el UUID de una factura PPD" style="min-width:260px">
+                <button class="btn btn-soft-primary" id="agregarUuid" type="button" disabled>Buscar UUID</button>
+            </div>
+        </div>
         <div id="avisoLimiteFacturas" class="alert alert-warning rounded-0 mb-0 d-none" role="status"></div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
-                <thead><tr><th scope="col" style="width:42px">#</th><th>Factura</th><th>UUID</th><th>Fecha</th><th>Saldo anterior</th><th>Parcialidad</th><th style="min-width:165px">Monto pagado</th><th>Saldo restante</th></tr></thead>
-                <tbody id="facturasBody"><tr><td colspan="8" class="text-center text-muted py-4"><?= $clienteAsignado ? 'Selecciona un perfil fiscal para consultar las facturas.' : 'No tienes un cliente asignado.' ?></td></tr></tbody>
+                <thead><tr><th scope="col" style="width:42px">#</th><th>Factura</th><th>UUID</th><th>Tratamiento</th><th>Fecha</th><th>Saldo anterior</th><th>Parcialidad</th><th style="min-width:165px">Monto pagado</th><th>Saldo restante</th></tr></thead>
+                <tbody id="facturasBody"><tr><td colspan="9" class="text-center text-muted py-4"><?= $clienteAsignado ? 'Selecciona un perfil fiscal para consultar las facturas.' : 'No tienes un cliente asignado.' ?></td></tr></tbody>
             </table>
         </div>
     </div>
 
     <div class="card complemento-acciones-sticky">
         <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div><small class="text-muted d-block">Monto total recibido</small><strong id="totalPago" class="fs-22">$0.00</strong></div>
+            <div><small class="text-muted d-block">Monto total recibido</small><strong id="totalPago" class="fs-22">$0.00</strong>
+                <small id="avisoMovimiento" class="text-warning d-block"></small></div>
             <div class="d-flex flex-wrap gap-2">
                 <button id="guardarComplemento" class="btn btn-primary" type="submit" disabled><i data-lucide="save" class="fs-17 me-1"></i>Guardar complemento pendiente</button>
                 <button id="guardarYTimbrar" class="btn btn-outline-success" type="submit" disabled><i data-lucide="badge-check" class="fs-17 me-1"></i>Guardar y timbrar</button>
@@ -121,6 +153,8 @@ require __DIR__ . '/templates/page-start.php';
 $configuracion = json_encode([
     'csrf' => $_SESSION['complemento_pago_csrf'],
     'csrfTimbrado' => $_SESSION['complemento_timbrado_csrf'],
+    'pagoId' => $pagoId,
+    'montoMovimiento' => $movimiento !== null ? (float) $movimiento['monto'] : null,
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script>' . <<<'HTML'
 <script>
@@ -129,6 +163,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const cliente = document.getElementById('clienteId');
     const perfil = document.getElementById('perfil');
     const forma = document.getElementById('formaPago');
+    const tratamientoSelect = document.getElementById('tratamientoFiscalSelect');
+    const tratamientoOculto = document.getElementById('tratamientoFiscal');
     const fecha = document.getElementById('fechaPago');
     const hora = document.getElementById('horaPago');
     const horaServidorInicial = Date.parse(hora.dataset.instant);
@@ -143,8 +179,11 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     setInterval(actualizarHoraPago, 30000);
     const body = document.getElementById('facturasBody');
     const total = document.getElementById('totalPago');
+    const avisoMovimiento = document.getElementById('avisoMovimiento');
     const contador = document.getElementById('contadorFacturas');
     const seleccionarTodas = document.getElementById('seleccionarTodasFacturas');
+    const uuidManual = document.getElementById('uuidManual');
+    const agregarUuid = document.getElementById('agregarUuid');
     const avisoLimite = document.getElementById('avisoLimiteFacturas');
     const guardar = document.getElementById('guardarComplemento');
     const guardarYTimbrar = document.getElementById('guardarYTimbrar');
@@ -213,7 +252,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         body.replaceChildren();
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 8;
+        td.colSpan = 9;
         td.className = 'text-center text-muted py-4';
         td.textContent = texto;
         tr.appendChild(td);
@@ -236,6 +275,12 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         let cantidad = 0;
         let hayMontoInvalido = false;
         const filas = [...body.querySelectorAll('tr[data-factura-id]')];
+        const primeraSeleccionada = filas.find(tr => tr.querySelector('input[type=checkbox]').checked);
+        tratamientoOculto.value = primeraSeleccionada?.dataset.tratamiento || '';
+        tratamientoSelect.replaceChildren(new Option(
+            primeraSeleccionada?.dataset.tratamientoNombre || 'Se definirá al relacionar una factura',
+            tratamientoOculto.value
+        ));
         filas.forEach(tr => {
             const check = tr.querySelector('input[type=checkbox]');
             const monto = tr.querySelector('.monto-pagado');
@@ -265,32 +310,48 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             }
         });
         contador.textContent = cantidad + ' seleccionada' + (cantidad === 1 ? '' : 's');
-        seleccionarTodas.disabled = enProceso || filas.length === 0;
-        seleccionarTodas.checked = filas.length > 0 && cantidad === filas.length;
-        seleccionarTodas.indeterminate = cantidad > 0 && cantidad < filas.length;
+        const seleccionables = filas.filter(tr => !tr.querySelector('input[type=checkbox]').disabled);
+        seleccionarTodas.disabled = enProceso || seleccionables.length === 0;
+        seleccionarTodas.checked = seleccionables.length > 0 && cantidad === seleccionables.length;
+        seleccionarTodas.indeterminate = cantidad > 0 && cantidad < seleccionables.length;
         const excedeLimite = cantidad > 20;
         avisoLimite.classList.toggle('d-none', !excedeLimite);
         avisoLimite.textContent = excedeLimite
             ? 'Seleccionaste ' + cantidad + ' facturas. Solo se permiten 20 por complemento; desmarca ' + (cantidad - 20) + ' para continuar.'
             : '';
         total.textContent = dinero(suma);
-        const deshabilitar = enProceso || !cantidad || hayMontoInvalido || excedeLimite || !cliente.value || !perfil.value || !forma.value || !fecha.value || fecha.value > fecha.max;
+        const montoMovimiento = window.complementoConfig.montoMovimiento;
+        const diferenciaMovimiento = montoMovimiento !== null
+            && Math.round(suma * 100) !== Math.round(montoMovimiento * 100);
+        avisoMovimiento.textContent = diferenciaMovimiento && cantidad
+            ? 'La suma debe coincidir con el movimiento de ' + dinero(montoMovimiento) + '.' : '';
+        const deshabilitar = enProceso || !cantidad || hayMontoInvalido || excedeLimite || diferenciaMovimiento
+            || !cliente.value || !perfil.value || !forma.value || !fecha.value || fecha.value > fecha.max;
         guardar.disabled = deshabilitar;
         guardarYTimbrar.disabled = deshabilitar;
     }
     seleccionarTodas.addEventListener('change', () => {
+        const primera = [...body.querySelectorAll('tr[data-factura-id]')].find(tr => tr.querySelector('input[type=checkbox]').checked);
+        const tratamiento = primera?.dataset.tratamiento
+            || body.querySelector('tr[data-factura-id] input[type=checkbox]:not(:disabled)')
+                ?.closest('tr')?.dataset.tratamiento || '';
+        let incompatibles = false;
         body.querySelectorAll('tr[data-factura-id] input[type=checkbox]').forEach(check => {
-            check.checked = seleccionarTodas.checked;
+            const fila = check.closest('tr');
+            check.checked = !check.disabled && seleccionarTodas.checked
+                && (!tratamiento || fila.dataset.tratamiento === tratamiento);
+            if (seleccionarTodas.checked && !check.checked && !check.disabled) incompatibles = true;
         });
         actualizarTotal();
+        if (incompatibles) aviso('Hay facturas con tratamientos fiscales distintos. Crea complementos separados.');
     });
-    function mostrarFacturas(facturas) {
-        body.replaceChildren();
-        if (!facturas.length) return mostrarVacio('No hay facturas PPD timbradas con saldo para este perfil fiscal.');
-        facturas.forEach(factura => {
+    function agregarFilaFactura(factura) {
             const tr = document.createElement('tr');
             tr.dataset.facturaId = String(factura.id);
             tr.dataset.saldo = String(factura.saldo);
+            tr.dataset.tratamiento = factura.tratamiento;
+            tr.dataset.tratamientoNombre = factura.tratamiento_nombre;
+            if (factura.autorizacion_uuid) tr.dataset.autorizacionUuid = factura.autorizacion_uuid;
             const agregar = (texto, clase = '') => {
                 const td = document.createElement('td');
                 td.className = clase;
@@ -301,10 +362,13 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             const seleccion = document.createElement('input');
             seleccion.type = 'checkbox';
             seleccion.className = 'form-check-input';
+            seleccion.disabled = !!factura.sin_saldo;
             seleccion.setAttribute('aria-label', 'Seleccionar factura ' + factura.folio);
             agregar('').appendChild(seleccion);
             agregar(factura.folio, 'fw-semibold');
             agregar(factura.uuid, 'font-monospace small');
+            if (factura.sin_saldo) agregar('Sin saldo; solo referencia del movimiento');
+            else agregar(factura.tratamiento_nombre);
             agregar(factura.fecha);
             agregar(dinero(factura.saldo));
             agregar(String(factura.siguiente_parcialidad));
@@ -322,7 +386,20 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             monto.setAttribute('aria-describedby', error.id);
             celdaMonto.append(monto, error);
             agregar(dinero(factura.saldo), 'saldo-restante');
-            seleccion.addEventListener('change', actualizarTotal);
+            seleccion.addEventListener('change', () => {
+                if (seleccion.checked) {
+                    const actual = [...body.querySelectorAll('tr[data-factura-id]')].find(otra =>
+                        otra !== tr && otra.querySelector('input[type=checkbox]').checked);
+                    if (actual && actual.dataset.tratamiento !== tr.dataset.tratamiento) {
+                        seleccion.checked = false;
+                        actualizarTotal();
+                        aviso('La factura usa ' + tr.dataset.tratamientoNombre + ', pero el complemento ya heredó '
+                            + actual.dataset.tratamientoNombre + '. Crea complementos separados.');
+                        return;
+                    }
+                }
+                actualizarTotal();
+            });
             monto.addEventListener('input', () => { separarMiles(monto); actualizarTotal(); });
             monto.addEventListener('blur', () => {
                 const pagado = montoNumerico(monto);
@@ -330,7 +407,12 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                 actualizarTotal();
             });
             body.appendChild(tr);
-        });
+            return tr;
+    }
+    function mostrarFacturas(facturas) {
+        body.replaceChildren();
+        if (!facturas.length) return mostrarVacio('No hay facturas PPD timbradas con saldo para este perfil fiscal.');
+        facturas.forEach(agregarFilaFactura);
         actualizarTotal();
     }
     async function cargarPerfilesCliente() {
@@ -340,26 +422,72 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         mostrarVacio('Selecciona un perfil fiscal.');
         if (!cliente.value) return;
         try {
-            const datos = await obtener('api/complementos-pago-crear.php?accion=perfiles&cliente_id=' + encodeURIComponent(cliente.value));
+            const datos = await obtener('api/complementos-pago-crear.php?accion=perfiles&cliente_id=' + encodeURIComponent(cliente.value)
+                + '&pago_id=' + encodeURIComponent(window.complementoConfig.pagoId || ''));
             if (actual !== solicitudActual) return;
-            perfil.replaceChildren(new Option(datos.perfiles.length ? 'Seleccionar perfil...' : 'No hay razones sociales con facturas PPD con saldo pendiente', ''));
-            datos.perfiles.forEach(item => perfil.add(new Option(item.clave_corta + ' · ' + item.razon_social + ' · ' + item.rfc, item.id)));
-            perfil.disabled = !datos.perfiles.length;
-            if (!datos.perfiles.length) mostrarVacio('No hay facturas PPD con saldo pendiente para este cliente.');
+            if (Number(datos.empresa_id) !== Number(form.dataset.empresa)) {
+                window.location.reload();
+                return;
+            }
+            const disponibles = datos.perfiles.filter(item => item.documentos_vivos_empresa > 0 || item.movimiento_excepcion);
+            perfil.replaceChildren(new Option(disponibles.length ? 'Seleccionar perfil...' : 'No hay razones sociales con facturas PPD con saldo pendiente', ''));
+            datos.perfiles.forEach(item => {
+                const otras = Math.max(0, item.documentos_vivos_global - item.documentos_vivos_empresa);
+                const descripcion = item.documentos_vivos_empresa > 0
+                    ? item.documentos_vivos_empresa + ' documento(s) vivo(s)'
+                    : item.movimiento_excepcion ? 'Factura del movimiento con total coincidente'
+                    : 'Sin documentos vivos para esta empresa' + (otras ? ' · ' + otras + ' en otras empresas' : '');
+                const opcion = new Option(item.clave_corta + ' · ' + item.razon_social + ' · ' + item.rfc + ' · ' + descripcion, item.id);
+                opcion.disabled = item.documentos_vivos_empresa === 0 && !item.movimiento_excepcion;
+                perfil.add(opcion);
+            });
+            perfil.disabled = !disponibles.length;
+            if (!disponibles.length) mostrarVacio('No hay facturas PPD con saldo pendiente para esta empresa y cliente.');
         } catch (error) {
             if (actual === solicitudActual) aviso(error.message, error.diagnostico);
         }
     }
     if (Number(cliente.value) > 0) cargarPerfilesCliente();
+    document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState !== 'visible') return;
+        try {
+            const datos = await obtener('api/complementos-pago-crear.php?accion=empresa');
+            if (Number(datos.empresa_id) !== Number(form.dataset.empresa)) window.location.reload();
+        } catch { /* La validación final sigue en el servidor. */ }
+    });
     perfil.addEventListener('change', async () => {
         const actual = ++solicitudActual;
+        agregarUuid.disabled = !perfil.value;
         mostrarVacio('Consultando facturas PPD...');
         if (!perfil.value) return;
         try {
-            const facturas = await obtener('api/complementos-pago-crear.php?accion=facturas&cliente_id=' + encodeURIComponent(cliente.value) + '&perfil_id=' + encodeURIComponent(perfil.value));
+            const facturas = await obtener('api/complementos-pago-crear.php?accion=facturas&cliente_id=' + encodeURIComponent(cliente.value)
+                + '&perfil_id=' + encodeURIComponent(perfil.value)
+                + '&pago_id=' + encodeURIComponent(window.complementoConfig.pagoId || ''));
             if (actual === solicitudActual) mostrarFacturas(facturas);
         } catch (error) {
             if (actual === solicitudActual) { mostrarVacio('No fue posible cargar las facturas.'); aviso(error.message, error.diagnostico); }
+        }
+    });
+    agregarUuid.addEventListener('click', async () => {
+        if (!perfil.value || agregarUuid.disabled) return;
+        agregarUuid.disabled = true;
+        try {
+            const factura = await obtener('api/complementos-pago-crear.php?accion=uuid&cliente_id='
+                + encodeURIComponent(cliente.value) + '&perfil_id=' + encodeURIComponent(perfil.value)
+                + '&uuid=' + encodeURIComponent(uuidManual.value.trim()));
+            const existente = [...body.querySelectorAll('tr[data-factura-id]')].find(tr =>
+                Number(tr.dataset.facturaId) === factura.id || tr.querySelector('.font-monospace')?.textContent === factura.uuid);
+            if (existente) return aviso('Esta factura ya aparece en el complemento.');
+            if (!body.querySelector('tr[data-factura-id]')) body.replaceChildren();
+            const tr = agregarFilaFactura(factura);
+            tr.querySelector('input[type=checkbox]').click();
+            uuidManual.value = '';
+            actualizarTotal();
+        } catch (error) {
+            aviso(error.message, error.diagnostico);
+        } finally {
+            agregarUuid.disabled = !perfil.value;
         }
     });
     forma.addEventListener('change', actualizarTotal);
@@ -379,7 +507,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                 || pagado <= 0 || pagado > Number(tr.dataset.saldo)) {
                 return aviso('Revisa el monto pagado de cada factura seleccionada.');
             }
-            facturas.push({factura_id: Number(tr.dataset.facturaId), monto: pagado.toFixed(2)});
+            facturas.push({factura_id: Number(tr.dataset.facturaId), monto: pagado.toFixed(2),
+                autorizacion_uuid: tr.dataset.autorizacionUuid || ''});
         }
         if (!facturas.length) return aviso('Selecciona al menos una factura.');
         if (facturas.length > 20) return aviso('Solo se permiten 20 facturas por complemento. Reduce la selección para continuar.');
@@ -393,7 +522,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                 body: JSON.stringify({csrf: window.complementoConfig.csrf, solicitud_id: idSolicitud,
                     cliente_id: Number(cliente.value), perfil_id: Number(perfil.value),
                     forma_pago_id: Number(forma.value), fecha_pago: fecha.value,
-                    hora_pago: hora.value, facturas}),
+                    hora_pago: hora.value, tratamiento_fiscal: tratamientoOculto.value,
+                    pago_id: window.complementoConfig.pagoId || null, facturas}),
             });
             const payload = await leerRespuesta(response, 'guardar el complemento');
             if (!response.ok || !payload.ok) {

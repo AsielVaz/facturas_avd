@@ -68,7 +68,7 @@ final class ComplementoPagoXmlGenerador
             'FormaDePagoP' => (string) $datos['forma_pago'], 'MonedaP' => 'MXN',
             'Monto' => $this->dinero($this->centavos($datos['monto_total']))]);
 
-        $suma = $baseIva16 = $iva16 = 0;
+        $suma = $baseIva16 = $iva16 = $baseIva0 = 0;
         $retencionesPago = ['001' => 0, '002' => 0];
         foreach ($relaciones as $relacion) {
             $monto = $this->centavos($relacion['monto'] ?? null);
@@ -92,9 +92,9 @@ final class ComplementoPagoXmlGenerador
                 'NumParcialidad' => (string) $relacion['num_pago'],
                 'ImpSaldoAnt' => $this->dinero($saldo), 'ImpPagado' => $this->dinero($monto),
                 'ImpSaldoInsoluto' => $this->dinero($restante),
-                'ObjetoImpDR' => $origen['tipo'] === 'iva16' ? '02' : '01',
+                'ObjetoImpDR' => in_array($origen['tipo'], ['iva16', 'iva0'], true) ? '02' : '01',
             ]);
-            if ($origen['tipo'] === 'iva16') {
+            if (in_array($origen['tipo'], ['iva16', 'iva0'], true)) {
                 $base = (int) round($origen['base'] * $monto / $origen['total'], 0, PHP_ROUND_HALF_UP);
                 $impuesto = (int) round($origen['iva'] * $monto / $origen['total'], 0, PHP_ROUND_HALF_UP);
                 $retencionesDr = [];
@@ -107,7 +107,8 @@ final class ComplementoPagoXmlGenerador
                 // Los importes originales se prorratean; el ajuste de centavos queda en la base.
                 $base += $monto - ($base + $impuesto - array_sum(array_column($retencionesDr, 'importe')));
                 if ($base <= 0) throw new ComplementoPagoXmlException('El pago no permite desglosar la base gravada.');
-                if (abs((int) round($base * 0.16, 0, PHP_ROUND_HALF_UP) - $impuesto) > 1) {
+                if ($origen['tipo'] === 'iva16'
+                    && abs((int) round($base * 0.16, 0, PHP_ROUND_HALF_UP) - $impuesto) > 1) {
                     throw new ComplementoPagoXmlException('No se pudo desglosar el IVA 16% del importe pagado.');
                 }
                 $impuestosDr = $documento->createElementNS(self::PAGOS, 'pago20:ImpuestosDR');
@@ -133,10 +134,13 @@ final class ComplementoPagoXmlGenerador
                 $trasladoDr = $documento->createElementNS(self::PAGOS, 'pago20:TrasladoDR');
                 $trasladosDr->appendChild($trasladoDr);
                 $this->atributos($trasladoDr, ['BaseDR' => $this->dinero($base), 'ImpuestoDR' => '002',
-                    'TipoFactorDR' => 'Tasa', 'TasaOCuotaDR' => '0.160000',
+                    'TipoFactorDR' => 'Tasa', 'TasaOCuotaDR' => $origen['tipo'] === 'iva0' ? '0.000000' : '0.160000',
                     'ImporteDR' => $this->dinero($impuesto)]);
-                $baseIva16 += $base;
-                $iva16 += $impuesto;
+                if ($origen['tipo'] === 'iva0') $baseIva0 += $base;
+                else {
+                    $baseIva16 += $base;
+                    $iva16 += $impuesto;
+                }
             }
             $suma += $monto;
         }
@@ -144,9 +148,12 @@ final class ComplementoPagoXmlGenerador
             throw new ComplementoPagoXmlException('La suma de los documentos no coincide con el monto del pago.');
         }
         $totales->setAttribute('MontoTotalPagos', $this->dinero($suma));
-        if ($baseIva16 > 0) {
-            $totales->setAttribute('TotalTrasladosBaseIVA16', $this->dinero($baseIva16));
-            $totales->setAttribute('TotalTrasladosImpuestoIVA16', $this->dinero($iva16));
+        if ($baseIva16 > 0 || $baseIva0 > 0) {
+            if ($baseIva0 > 0) $totales->setAttribute('TotalTrasladosBaseIVA0', $this->dinero($baseIva0));
+            if ($baseIva16 > 0) {
+                $totales->setAttribute('TotalTrasladosBaseIVA16', $this->dinero($baseIva16));
+                $totales->setAttribute('TotalTrasladosImpuestoIVA16', $this->dinero($iva16));
+            }
             if ($retencionesPago['001'] > 0) $totales->setAttribute('TotalRetencionesISR', $this->dinero($retencionesPago['001']));
             if ($retencionesPago['002'] > 0) $totales->setAttribute('TotalRetencionesIVA', $this->dinero($retencionesPago['002']));
             $impuestosP = $documento->createElementNS(self::PAGOS, 'pago20:ImpuestosP');
@@ -163,11 +170,15 @@ final class ComplementoPagoXmlGenerador
             }
             $trasladosP = $documento->createElementNS(self::PAGOS, 'pago20:TrasladosP');
             $impuestosP->appendChild($trasladosP);
-            $trasladoP = $documento->createElementNS(self::PAGOS, 'pago20:TrasladoP');
-            $trasladosP->appendChild($trasladoP);
-            $this->atributos($trasladoP, ['BaseP' => $this->dinero($baseIva16), 'ImpuestoP' => '002',
-                'TipoFactorP' => 'Tasa', 'TasaOCuotaP' => '0.160000',
-                'ImporteP' => $this->dinero($iva16)]);
+            foreach ([['base' => $baseIva16, 'tasa' => '0.160000', 'importe' => $iva16],
+                      ['base' => $baseIva0, 'tasa' => '0.000000', 'importe' => 0]] as $traslado) {
+                if ($traslado['base'] <= 0) continue;
+                $trasladoP = $documento->createElementNS(self::PAGOS, 'pago20:TrasladoP');
+                $trasladosP->appendChild($trasladoP);
+                $this->atributos($trasladoP, ['BaseP' => $this->dinero($traslado['base']), 'ImpuestoP' => '002',
+                    'TipoFactorP' => 'Tasa', 'TasaOCuotaP' => $traslado['tasa'],
+                    'ImporteP' => $this->dinero($traslado['importe'])]);
+            }
         }
         return $documento->saveXML() ?: throw new ComplementoPagoXmlException('No fue posible generar el XML del complemento.');
     }
@@ -229,9 +240,10 @@ final class ComplementoPagoXmlGenerador
             throw new ComplementoPagoXmlException('La factura usa varias tasas de impuesto; no se timbrará automáticamente.');
         }
         $traslado = $traslados->item(0);
+        $tasaTraslado = (float) $traslado->getAttribute('TasaOCuota');
         if ($traslado->getAttribute('Impuesto') !== '002' || $traslado->getAttribute('TipoFactor') !== 'Tasa'
-            || abs((float) $traslado->getAttribute('TasaOCuota') - 0.16) > 0.000001) {
-            throw new ComplementoPagoXmlException('Solo se admite IVA trasladado al 16% en el timbrado automático.');
+            || (abs($tasaTraslado - 0.16) > 0.000001 && abs($tasaTraslado) > 0.000001)) {
+            throw new ComplementoPagoXmlException('La factura usa una tasa de IVA no compatible con el timbrado automático.');
         }
         $base = $raiz->getAttribute('Version') === '3.3'
             ? $this->centavos($raiz->getAttribute('SubTotal'))
@@ -274,7 +286,7 @@ final class ComplementoPagoXmlGenerador
         if ($base <= 0 || abs($totalCalculado - $total) > 1) {
             throw new ComplementoPagoXmlException('La factura combina importes gravados y no gravados; requiere revisión fiscal manual.');
         }
-        return ['total' => $total, 'tipo' => 'iva16', 'base' => $base,
+        return ['total' => $total, 'tipo' => abs($tasaTraslado) < 0.000001 ? 'iva0' : 'iva16', 'base' => $base,
             'iva' => $iva, 'retenciones' => $retencionesDetalle];
     }
 
