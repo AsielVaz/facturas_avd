@@ -78,10 +78,12 @@ require __DIR__ . '/templates/page-start.php';
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label" for="fechaPago">Fecha y hora del pago</label>
-                    <input class="form-control" type="text" id="fechaPago" value="<?= $esc(date('d/m/Y H:i')) ?>"
+                    <label class="form-label" for="fechaPago">Fecha del pago</label>
+                    <input class="form-control" type="date" id="fechaPago" required
+                        value="<?= $esc(date('Y-m-d')) ?>" max="<?= $esc(date('Y-m-d')) ?>">
+                    <input type="hidden" id="horaPago"
                         data-instant="<?= $esc((new DateTimeImmutable('now'))->format(DATE_ATOM)) ?>"
-                        data-zona="<?= $esc(SesionEmpresa::ZONA_HORARIA) ?>" readonly>
+                        data-zona="<?= $esc(SesionEmpresa::ZONA_HORARIA) ?>">
                 </div>
             </div>
         </div>
@@ -128,16 +130,17 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const perfil = document.getElementById('perfil');
     const forma = document.getElementById('formaPago');
     const fecha = document.getElementById('fechaPago');
-    const horaServidorInicial = Date.parse(fecha.dataset.instant);
+    const hora = document.getElementById('horaPago');
+    const horaServidorInicial = Date.parse(hora.dataset.instant);
     const inicioReloj = performance.now();
-    const formatoFechaPago = new Intl.DateTimeFormat('es-MX', {
-        timeZone: fecha.dataset.zona, dateStyle: 'short', timeStyle: 'short',
+    const formatoHoraPago = new Intl.DateTimeFormat('en-GB', {
+        timeZone: hora.dataset.zona, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
     });
-    function actualizarFechaPago() {
-        fecha.value = formatoFechaPago.format(new Date(horaServidorInicial + performance.now() - inicioReloj));
+    function actualizarHoraPago() {
+        hora.value = formatoHoraPago.format(new Date(horaServidorInicial + performance.now() - inicioReloj));
     }
-    actualizarFechaPago();
-    setInterval(actualizarFechaPago, 30000);
+    actualizarHoraPago();
+    setInterval(actualizarHoraPago, 30000);
     const body = document.getElementById('facturasBody');
     const total = document.getElementById('totalPago');
     const contador = document.getElementById('contadorFacturas');
@@ -271,7 +274,7 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             ? 'Seleccionaste ' + cantidad + ' facturas. Solo se permiten 20 por complemento; desmarca ' + (cantidad - 20) + ' para continuar.'
             : '';
         total.textContent = dinero(suma);
-        const deshabilitar = enProceso || !cantidad || hayMontoInvalido || excedeLimite || !cliente.value || !perfil.value || !forma.value;
+        const deshabilitar = enProceso || !cantidad || hayMontoInvalido || excedeLimite || !cliente.value || !perfil.value || !forma.value || !fecha.value || fecha.value > fecha.max;
         guardar.disabled = deshabilitar;
         guardarYTimbrar.disabled = deshabilitar;
     }
@@ -360,9 +363,11 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         }
     });
     forma.addEventListener('change', actualizarTotal);
+    fecha.addEventListener('change', actualizarTotal);
     form.addEventListener('submit', async event => {
         event.preventDefault();
         if (enProceso || (guardar.disabled && guardarYTimbrar.disabled)) return;
+        actualizarHoraPago();
         const timbrarAlGuardar = event.submitter === guardarYTimbrar;
         const facturas = [];
         for (const tr of body.querySelectorAll('tr[data-factura-id]')) {
@@ -387,7 +392,8 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
                 headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
                 body: JSON.stringify({csrf: window.complementoConfig.csrf, solicitud_id: idSolicitud,
                     cliente_id: Number(cliente.value), perfil_id: Number(perfil.value),
-                    forma_pago_id: Number(forma.value), facturas}),
+                    forma_pago_id: Number(forma.value), fecha_pago: fecha.value,
+                    hora_pago: hora.value, facturas}),
             });
             const payload = await leerRespuesta(response, 'guardar el complemento');
             if (!response.ok || !payload.ok) {

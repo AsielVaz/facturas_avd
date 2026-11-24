@@ -133,8 +133,24 @@ final class ComplementoPagoAdministrador
             || !is_array($partidas) || $partidas === [] || count($partidas) > 20) {
             throw new ComplementoPagoValidacionException('Completa el cliente, perfil, forma de pago y las facturas relacionadas.');
         }
-        // La fecha de pago la fija el servidor al guardar, no el navegador.
-        $fecha = new DateTimeImmutable('now');
+        $ahora = new DateTimeImmutable('now');
+        $fechaTexto = $datos['fecha_pago'] ?? null;
+        $horaTexto = $datos['hora_pago'] ?? null;
+        $fecha = $ahora;
+        if ($fechaTexto !== null || $horaTexto !== null) {
+            if (!is_string($fechaTexto) || !is_string($horaTexto)
+                || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $fechaTexto)
+                || !preg_match('/^\d{2}:\d{2}:\d{2}$/D', $horaTexto)) {
+                throw new ComplementoPagoValidacionException('Selecciona una fecha de pago válida.');
+            }
+            $fecha = DateTimeImmutable::createFromFormat(
+                '!Y-m-d H:i:s', $fechaTexto . ' ' . $horaTexto,
+                new DateTimeZone(SesionEmpresa::ZONA_HORARIA)
+            );
+            if ($fecha === false || $fecha->format('Y-m-d H:i:s') !== $fechaTexto . ' ' . $horaTexto || $fecha > $ahora) {
+                throw new ComplementoPagoValidacionException('La fecha de pago no puede ser inválida ni futura.');
+            }
+        }
         $montos = [];
         foreach ($partidas as $partida) {
             if (!is_array($partida)) throw new ComplementoPagoValidacionException('Una factura relacionada no es válida.');
