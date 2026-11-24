@@ -101,13 +101,7 @@ require __DIR__ . '/templates/page-start.php';
                         data-instant="<?= $esc((new DateTimeImmutable('now'))->format(DATE_ATOM)) ?>"
                         data-zona="<?= $esc(SesionEmpresa::ZONA_HORARIA) ?>">
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="tratamientoFiscalSelect">Tratamiento fiscal heredado</label>
-                    <select class="form-select" id="tratamientoFiscalSelect" disabled>
-                        <option value="">Se definirá al relacionar una factura</option>
-                    </select>
-                    <input type="hidden" id="tratamientoFiscal" value="">
-                </div>
+                <input type="hidden" id="tratamientoFiscal" value="">
             </div>
         </div>
     </div>
@@ -163,7 +157,6 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
     const cliente = document.getElementById('clienteId');
     const perfil = document.getElementById('perfil');
     const forma = document.getElementById('formaPago');
-    const tratamientoSelect = document.getElementById('tratamientoFiscalSelect');
     const tratamientoOculto = document.getElementById('tratamientoFiscal');
     const fecha = document.getElementById('fechaPago');
     const hora = document.getElementById('horaPago');
@@ -277,10 +270,6 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         const filas = [...body.querySelectorAll('tr[data-factura-id]')];
         const primeraSeleccionada = filas.find(tr => tr.querySelector('input[type=checkbox]').checked);
         tratamientoOculto.value = primeraSeleccionada?.dataset.tratamiento || '';
-        tratamientoSelect.replaceChildren(new Option(
-            primeraSeleccionada?.dataset.tratamientoNombre || 'Se definirá al relacionar una factura',
-            tratamientoOculto.value
-        ));
         filas.forEach(tr => {
             const check = tr.querySelector('input[type=checkbox]');
             const monto = tr.querySelector('.monto-pagado');
@@ -431,14 +420,11 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
             }
             const disponibles = datos.perfiles.filter(item => item.documentos_vivos_empresa > 0 || item.movimiento_excepcion);
             perfil.replaceChildren(new Option(disponibles.length ? 'Seleccionar perfil...' : 'No hay razones sociales con facturas PPD con saldo pendiente', ''));
-            datos.perfiles.forEach(item => {
-                const otras = Math.max(0, item.documentos_vivos_global - item.documentos_vivos_empresa);
+            disponibles.forEach(item => {
                 const descripcion = item.documentos_vivos_empresa > 0
                     ? item.documentos_vivos_empresa + ' documento(s) vivo(s)'
-                    : item.movimiento_excepcion ? 'Factura del movimiento con total coincidente'
-                    : 'Sin documentos vivos para esta empresa' + (otras ? ' · ' + otras + ' en otras empresas' : '');
+                    : 'Factura del movimiento con total coincidente';
                 const opcion = new Option(item.clave_corta + ' · ' + item.razon_social + ' · ' + item.rfc + ' · ' + descripcion, item.id);
-                opcion.disabled = item.documentos_vivos_empresa === 0 && !item.movimiento_excepcion;
                 perfil.add(opcion);
             });
             perfil.disabled = !disponibles.length;
