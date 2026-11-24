@@ -37,6 +37,43 @@ final class ComplementoPagoAdministrador
         ];
     }
 
+    /** @return array{cliente: array<string,mixed>, perfiles: array<int,array<string,mixed>>} */
+    public function perfilesConSaldoPendiente(int $clienteId): array
+    {
+        $datos = (new FacturacionAdministrador($this->conexion, $this->empresa))->listarPerfilesCliente($clienteId);
+        $consulta = $this->conexion->prepare(
+            "SELECT CAST(f.id_clave_corta AS UNSIGNED) AS perfil_id, f.uuid,
+                    f.total_iva, f.xml_total, f.total_factura,
+                    COALESCE(SUM(rc.monto), 0) AS pagado
+             FROM facturas f
+             INNER JOIN metodos_pago mp ON mp.id = f.metodo_pago AND UPPER(TRIM(mp.clave)) = 'PPD'
+             LEFT JOIN facturar_rel_complementos rc ON rc.id_factura = f.id
+             WHERE f.razon = :empresa AND f.nombre = :cliente
+               AND (f.cancelado IS NULL OR f.cancelado = 0)
+               AND f.desactivado IS NULL
+               AND f.uuid IS NOT NULL AND TRIM(f.uuid) <> ''
+             GROUP BY f.id
+             HAVING COUNT(rc.id) = 0
+                 OR COALESCE(SUM(rc.monto), 0) < COALESCE(f.total_iva, f.xml_total, f.total_factura, 0)"
+        );
+        $consulta->bindValue(':empresa', $this->empresa, PDO::PARAM_INT);
+        $consulta->bindValue(':cliente', $clienteId, PDO::PARAM_INT);
+        $consulta->execute();
+        $disponibles = [];
+        while ($fila = $consulta->fetch(PDO::FETCH_ASSOC)) {
+            if (!$this->uuidValido((string) $fila['uuid'])) continue;
+            $total = $this->aCentavos($fila['total_iva'] ?? $fila['xml_total'] ?? $fila['total_factura'] ?? 0);
+            if ($total > $this->aCentavos($fila['pagado'])) {
+                $disponibles[(int) $fila['perfil_id']] = true;
+            }
+        }
+        $datos['perfiles'] = array_values(array_filter(
+            $datos['perfiles'],
+            static fn(array $perfil): bool => isset($disponibles[(int) $perfil['id']])
+        ));
+        return $datos;
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function facturasDisponibles(int $clienteId, int $perfilId): array
     {

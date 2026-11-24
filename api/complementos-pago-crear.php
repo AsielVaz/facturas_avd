@@ -54,7 +54,7 @@ try {
         $clienteId = filter_input(INPUT_GET, 'cliente_id', FILTER_VALIDATE_INT) ?: 0;
         $perfilId = filter_input(INPUT_GET, 'perfil_id', FILTER_VALIDATE_INT) ?: 0;
         $datos = match ($accion) {
-            'perfiles' => (new FacturacionAdministrador(Conexion::obtener()))->listarPerfilesCliente($clienteId),
+            'perfiles' => $administrador->perfilesConSaldoPendiente($clienteId),
             'facturas' => $administrador->facturasDisponibles($clienteId, $perfilId),
             default => throw new ComplementoPagoValidacionException('La consulta solicitada no existe.'),
         };

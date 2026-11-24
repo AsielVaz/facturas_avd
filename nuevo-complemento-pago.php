@@ -308,9 +308,10 @@ $pageScripts = '<script>window.complementoConfig=' . $configuracion . ';</script
         try {
             const datos = await obtener('api/complementos-pago-crear.php?accion=perfiles&cliente_id=' + encodeURIComponent(cliente.value));
             if (actual !== solicitudActual) return;
-            perfil.replaceChildren(new Option('Seleccionar perfil...', ''));
+            perfil.replaceChildren(new Option(datos.perfiles.length ? 'Seleccionar perfil...' : 'No hay razones sociales con facturas PPD con saldo pendiente', ''));
             datos.perfiles.forEach(item => perfil.add(new Option(item.clave_corta + ' · ' + item.razon_social + ' · ' + item.rfc, item.id)));
             perfil.disabled = !datos.perfiles.length;
+            if (!datos.perfiles.length) mostrarVacio('No hay facturas PPD con saldo pendiente para este cliente.');
         } catch (error) {
             if (actual === solicitudActual) aviso(error.message, error.diagnostico);
         }
